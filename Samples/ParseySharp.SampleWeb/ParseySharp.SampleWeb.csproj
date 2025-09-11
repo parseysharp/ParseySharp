@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="LanguageExt.Core" Version="5.0.0-beta-54" />
+    <PackageReference Include="LanguageExt.Streaming" Version="5.0.0-beta-54" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ParseySharp\ParseySharp.csproj" />
+    <ProjectReference Include="..\..\ParseySharp.AspNetCore\ParseySharp.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\ParseySharp.Protobuf.AspNetCore\ParseySharp.Protobuf.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\ParseySharp.MessagePack.AspNetCore\ParseySharp.MessagePack.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\ParseySharp.Yaml.AspNetCore\ParseySharp.Yaml.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\ParseySharp.Avro.AspNetCore\ParseySharp.Avro.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\ParseySharp.Json\ParseySharp.Json.csproj" Condition="Exists('..\..\ParseySharp.Json\ParseySharp.Json.csproj')" />
+    <ProjectReference Include="..\..\ParseySharp.Swashbuckle\ParseySharp.Swashbuckle.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <!-- Disable analyzers; rely on compiler diagnostics only -->
+    <EnableNETAnalyzers>false</EnableNETAnalyzers>
+
+    <!-- Enable nullable reference types repo-wide -->
+    <Nullable>enable</Nullable>
+
+    <!-- Promote key nullable warnings to errors (tighten as desired) -->
+    <WarningsAsErrors>CS8600;CS8602;CS8603;CS8604;CS8618;CS8625</WarningsAsErrors>
+  </PropertyGroup>
+
+</Project>

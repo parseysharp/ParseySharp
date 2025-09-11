@@ -1,0 +1,12 @@
+ParseySharp TODOs
+
+[Swashbuckle Integration]
+- [ ] Create optional ParseySharp.Swashbuckle integration package
+- [ ] Implement SetRequestExamples extension method (docs-only) in the integration package
+- [ ] Add IOperationFilter to map RequestExamples to OpenAPI requestBody examples
+- [ ] Add AddParseySharpSwagger() extension to register the operation filter
+- [ ] Wire the SampleWeb app to use the integration and verify examples appear in Swagger UI
+ - [ ] Override MessagePack/Protobuf media types in OpenAPI to schema: type=string, format=binary so Swagger UI can upload raw bytes (file chooser)
+ - [ ] Provide per-media-type toggle/config in AddParseySharpSwagger() to enable/disable the binary schema override
+
+- Fix serialization of Actual field in errors

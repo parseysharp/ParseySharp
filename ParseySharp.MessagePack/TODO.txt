@@ -1,0 +1,73 @@
+Selective decode, MessagePack-only parsers, and carrier expansion
+
+1) Selective decode parsing (not implemented yet)
+- Current: MessagePackBuilder reads the entire payload into a fully materialized MsgNode tree (Map/Array/Str/I64/U64/F64/Bool/Bin/Nil). This is simple but allocates eagerly and loses the opportunity to skip subtrees you never visit.
+- Goal: decode only what the parser traverses; avoid building subtrees that aren’t needed.
+- Changes required:
+  - Add lazy carrier variants:
+    - Introduce a cursor-based carrier (e.g., MsgCursor) that wraps a MessagePackReader/ReadOnlySequence<byte> and can materialize nodes on demand.
+    - Alternative: extend MsgNode to include lazily-decoded nodes backed by slices of the input (e.g., read-only spans/RO memory) and decode children when navigated.
+  - Navigator changes:
+    - Update ParsePathNav for MessagePack so Prop/Index/Unbox operate on lazy nodes/cursor and materialize only requested children.
+    - For arrays: expose iteration without pre-building List<MsgNode>; provide a reader/enumerator that yields elements one-by-one.
+  - Zero-copy where possible:
+    - Keep string/bytes as views into the original buffer when safe (MessagePackReader can hand back slices). Convert only when needed (e.g., when returning string).
+  - API sketch:
+    - MessagePackBuilder.FromBytesLazy(ReadOnlyMemory<byte>) -> MsgNode (lazy root) or MsgCursor
+    - Navigator methods detect lazy nodes and decode on demand.
+  - Streaming arrays (optional next step): for very large arrays, offer IAsyncEnumerable<MsgNode> by framing input (not standard MessagePack HTTP streaming, but useful for files).
+
+2) Navigator variants and optional MessagePack-specific combinators
+- Navigator-parser separation (non-negotiable):
+  - Parsers do not communicate policy to the navigator. The navigator does not tailor to a specific parser. All behavior flows through `Prop/Index/Unbox`.
+- Provide an alternative navigator/policy that preserves encoded types:
+  - "Strict" MessagePack navigator: `Unbox` returns underlying encoded types (e.g., U64 -> `ulong`, Bin -> `byte[]`, Ext -> ext node), instead of coercing.
+  - Selection via configuration (e.g., `ParseySharpOptions`) or a distinct `ParsePathNavMessagePack` instance. Call sites keep using `Parse.As<T>()`.
+- With the strict navigator, prefer the usual `Parse.As<T>()`:
+  - `Parse.As<ulong>()` becomes a hard assertion that the encoded value is U64.
+  - `Parse.As<byte[]>()` for Bin, `Parse.As<Guid>()` if Bin->Guid conversion is provided at Unbox or via a tiny adapter function.
+- Optional convenience combinators (built strictly on top of preserved types; not required):
+  - `ParseMessagePack.MsgU64OrString()` : `Parse<Either<ulong,string>>` to preserve extremely large unsigned values in string form by policy.
+  - Binary adapters: `ParseMessagePack.MsgBinAsBase64()`, `ParseMessagePack.MsgBinAsUtf8()` (validation), `ParseMessagePack.MsgGuid()` (16-byte Bin -> Guid). These are thin utilities over `Parse.As<byte[]>()` with additional checks/transforms.
+- Normalization (independent of parser):
+  - `[[k,v], ...]` -> Map normalization remains a navigator/carrier concern. Expose as a policy knob or subtree adapter; parsers still use `Parse.As<T>()` normally.
+
+3) Why these add value vs transcoding to JSON first
+- JSON lacks unsigned integer type and binary; we’d either lose precision or base64-encode, adding allocations and CPU.
+- Direct MessagePack keeps type fidelity (I64/U64/Bin/Nil) and lets us define strict/clear policies for numeric bounds and binary handling.
+- Normalization (e.g., array-of-pairs -> map) is known to be common with certain libs (e.g., LanguageExt Map); we can do it at the carrier level.
+
+4) Extending the carrier further (future work)
+- Ext types:
+  - Add MsgNode.Ext(sbyte typeCode, byte[] data)
+  - Parsers:
+    - ParseMessagePack.MsgExt(code) : Parse<byte[]>
+    - ParseMessagePack.MsgTimestamp() : Parse<DateTimeOffset> (standard MessagePack timestamp ext)
+    - ParseMessagePack.MsgDecimal() : Parse<decimal> (define a policy or adopt a known ext convention)
+- Non-string map keys:
+  - Introduce a MapK with non-string keys as MsgNode (e.g., IReadOnlyList<KeyValuePair<MsgNode, MsgNode>>)
+  - Parsers to coerce keys deterministically:
+    - ParseMessagePack.MsgMapKey(Func<MsgNode,string>)
+    - ParseMessagePack.MsgMapWithKeys<TK,TV>(Parse<TK> keyParser, Parse<TV> valParser)
+- Policy knobs (surfaced via options or parser-level):
+  - NumericPreference (PreferInt32/PreferInt64/Strict)
+  - KeyCoercion (how to stringify non-string keys)
+  - BinPolicy (auto-decode specific Bin paths as UTF-8, GUID, etc.)
+
+5) Examples that demonstrate value
+- Binary GUID (impossible in JSON without custom base64):
+  - (ParseMessagePack.MsgGuid().At("id", []), Parse.As<string>().At("name", []))
+- Timestamp ext direct:
+  - ParseMessagePack.MsgTimestamp().At("when", [])
+- Very large counters (ulong) preserved:
+  - ParseMessagePack.MsgU64OrString().At("bigCounter", [])
+- Array-of-pairs normalization:
+  - Use MsgNormalizeKv() / MsgSeqOfPairsToMap to parse [["k","v"], ...] as a map
+
+6) Notes on `Parse.As<T>()` and helpers (no cross-layer coupling)
+- Under the coercing navigator (current):
+  - `Unbox` applies Int32-preferred/Int64 fallback for I64, and U64 is coerced to `int`/`long`/`string` by range. `Parse.As<int>()`/`Parse.As<long>()` suffice for signed values, but `Parse.As<ulong>()` cannot assert U64 because `Unbox` never returns `ulong`.
+- Under the strict navigator (preserving types):
+  - Use `Parse.As<T>()` for assertions and parsing of preserved types (e.g., `ulong`, `byte[]`). No special helpers are required.
+- Helpers are optional sugar only:
+  - They must be implemented purely on top of what `Unbox` exposes (e.g., transform `byte[]` to base64 or `Guid`). They do not imply parser-level knowledge of navigator internals nor navigator awareness of parser selection.

@@ -1,0 +1,81 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Build output
+**/bin/
+**/obj/
+**/Debug/
+**/Release/
+**/x64/
+**/x86/
+**/ARM/
+**/ARM64/
+**/artifacts/
+
+# VS/IDE user files
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider / ReSharper
+.idea/
+*.DotSettings.user
+_ReSharper*/
+*_ReSharper.Caches/
+
+# VS Code (keep workspace settings if you like; ignore user-specific junk)
+.history/
+*.code-workspace
+# Uncomment if you want to ignore VS Code settings too
+# .vscode/
+
+# NuGet
+# Global packages are outside the repo, but cache/restore artifacts may appear
+*.nupkg
+*.snupkg
+# packages/ is legacy; keep build/templates if you use them
+packages/*
+!packages/build/
+!packages/repositories.config
+
+# Test results / coverage
+TestResults/
+**/TestResult*/
+*.trx
+*.coverage
+*.coveragexml
+.coverage/
+.coveragexml/
+.coverlet/
+CoverageReport/
+lcov.info
+
+# Logs / caches
+*.log
+*.tlog
+*.cache
+*.tmp
+*.ldb
+*.sdf
+*.db
+*.opendb
+
+# MSBuild/Publish intermediates
+app.publish/
+publish/
+
+# Entity Framework / scaffolding temp
+migrations-scripts/
+
+# Azure Functions local settings (keep local only)
+local.settings.json
+
+# Docker / tooling (optional)
+# .docker/
+# docker-compose.override.yml
+
+# JetBrains Rider solution metadata (optional)
+*.sln.iml
