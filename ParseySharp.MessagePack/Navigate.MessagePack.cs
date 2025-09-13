@@ -21,15 +21,15 @@ public abstract record MsgNode
 public static class ParsePathNavMessagePack
 {
   public static readonly ParsePathNav<MsgNode> MsgPack =
-    new(
+    ParsePathNav<MsgNode>.Create(
       Prop: (node, name) =>
         node switch
         {
           MsgNode.Map m =>
             (m.Items.TryGetValue(name, out var child)
-              ? Right<object, Option<MsgNode>>(Optional(child))
-              : Right<object, Option<MsgNode>>(None)),
-          _ => Left<object, Option<MsgNode>>(node)
+              ? Right<Unknown<MsgNode>, Option<MsgNode>>(Optional(child))
+              : Right<Unknown<MsgNode>, Option<MsgNode>>(None)),
+          _ => Left<Unknown<MsgNode>, Option<MsgNode>>(Unknown.New(node))
         },
 
       Index: (node, i) =>
@@ -37,36 +37,37 @@ public static class ParsePathNavMessagePack
         {
           MsgNode.Array a when i >= 0 =>
             (i < a.Items.Count
-              ? Right<object, Option<MsgNode>>(Optional(a.Items[i]))
-              : Right<object, Option<MsgNode>>(None)),
-          _ => Left<object, Option<MsgNode>>(node)
+              ? Right<Unknown<MsgNode>, Option<MsgNode>>(Optional(a.Items[i]))
+              : Right<Unknown<MsgNode>, Option<MsgNode>>(None)),
+          _ => Left<Unknown<MsgNode>, Option<MsgNode>>(Unknown.New(node))
         },
 
       Unbox: node => node switch
       {
-        MsgNode.Nil => Right<object, Unknown<object>>(new Unknown<object>.None()),
-        MsgNode.Str x => Right<object, Unknown<object>>(Unknown.New<object>(x.Value)),
+        MsgNode.Nil => Right<Unknown<MsgNode>, Unknown<object>>(new Unknown<object>.None()),
+        MsgNode.Str x => Right<Unknown<MsgNode>, Unknown<object>>(Unknown.New<object>(x.Value)),
         // Prefer Int32 when in range, else Int64
         MsgNode.I64 x =>
           (x.Value <= int.MaxValue && x.Value >= int.MinValue)
-            ? Right<object, Unknown<object>>(Unknown.New<object>((int)x.Value))
-            : Right<object, Unknown<object>>(Unknown.New<object>(x.Value)),
+            ? Right<Unknown<MsgNode>, Unknown<object>>(Unknown.New<object>((int)x.Value))
+            : Right<Unknown<MsgNode>, Unknown<object>>(Unknown.New<object>(x.Value)),
         // U64: Int32 if in range, else Int64 if it fits, else string to preserve value
         MsgNode.U64 x =>
           (x.Value <= (ulong)int.MaxValue)
-            ? Right<object, Unknown<object>>(Unknown.New<object>((int)x.Value))
+            ? Right<Unknown<MsgNode>, Unknown<object>>(Unknown.New<object>((int)x.Value))
             : (x.Value <= long.MaxValue)
-              ? Right<object, Unknown<object>>(Unknown.New<object>((long)x.Value))
-              : Right<object, Unknown<object>>(Unknown.New<object>(x.Value.ToString())),
-        MsgNode.F64 x => Right<object, Unknown<object>>(Unknown.New<object>(x.Value)),
-        MsgNode.Bool x => Right<object, Unknown<object>>(Unknown.New<object>(x.Value)),
-        MsgNode.Bin x => Right<object, Unknown<object>>(Unknown.New<object>(x.Value)),
+              ? Right<Unknown<MsgNode>, Unknown<object>>(Unknown.New<object>((long)x.Value))
+              : Right<Unknown<MsgNode>, Unknown<object>>(Unknown.New<object>(x.Value.ToString())),
+        MsgNode.F64 x => Right<Unknown<MsgNode>, Unknown<object>>(Unknown.New<object>(x.Value)),
+        MsgNode.Bool x => Right<Unknown<MsgNode>, Unknown<object>>(Unknown.New<object>(x.Value)),
+        MsgNode.Bin x => Right<Unknown<MsgNode>, Unknown<object>>(Unknown.New<object>(x.Value)),
         // Arrays expose their items so Seq can iterate naturally
-        MsgNode.Array a => Right<object, Unknown<object>>(Unknown.New<object>(a.Items)),
+        MsgNode.Array a => Right<Unknown<MsgNode>, Unknown<object>>(Unknown.New<object>(a.Items)),
         // Maps remain as nodes for key-based traversal
-        MsgNode.Map => Right<object, Unknown<object>>(Unknown.New<object>(node)),
-        _ => Left<object, Unknown<object>>(node)
-      }
+        MsgNode.Map => Right<Unknown<MsgNode>, Unknown<object>>(Unknown.New<object>(node)),
+        _ => Left<Unknown<MsgNode>, Unknown<object>>(Unknown.New(node))
+      },
+      CloneNode: x => x
     );
 }
 

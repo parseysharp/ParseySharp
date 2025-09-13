@@ -3,6 +3,7 @@ using ParseySharp;
 using ParseySharp.AspNetCore;
 using ParseySharp.Avro.AspNetCore;
 using ParseySharp.Yaml.AspNetCore;
+using System.Text.Json.Serialization;
 
 namespace ParseySharp.SampleWeb.Controllers;
 
@@ -57,6 +58,29 @@ public sealed class ParsedMvcController : ControllerBase
       .Apply((id, count) => new EventRow(id, count))
       .As();
 
+    // PaymentMethod example (business-friendly) used in README
+    [JsonPolymorphic(TypeDiscriminatorPropertyName = "paymentMethod")]
+    [JsonDerivedType(typeof(Card),   "card")]
+    [JsonDerivedType(typeof(Paypal), "paypal")]
+    public abstract record PaymentMethod;
+    public sealed record Card(string number, int cvv) : PaymentMethod;
+    public sealed record Paypal(string email) : PaymentMethod;
+
+    private static readonly Parse<PaymentMethod> PaymentParser = (
+      from kind in Parse.As<string>().At("paymentMethod", [])
+      from pm in kind switch
+      {
+        "card" => (
+          Parse.As<string>().At("number", []),
+          Parse.As<int>().At("cvv", [])
+        ).Apply((number, cvv) => (PaymentMethod)new Card(number, cvv)),
+        "paypal" => Parse.As<string>().At("email", [])
+          .Map(email => (PaymentMethod)new Paypal(email)),
+        _ => Parse.Fail<PaymentMethod>($"Unsupported payment method: {kind}").At("paymentMethod", [])
+      }
+      select pm
+    ).As();
+
     // Body (Item)
     [HttpPost("items")]
     [AcceptsJson]
@@ -74,6 +98,17 @@ public sealed class ParsedMvcController : ControllerBase
     [RequestModel<Item>]
     public Task<IActionResult> GetItem(CancellationToken ct)
       => this.ParsedAsync(ItemParser, item => Ok(new { received = item }), ct);
+
+    // Payments (business-friendly example from README)
+    [HttpPost("payments")]
+    [AcceptsJson]
+    [AcceptsXml]
+    [AcceptsFormUrlEncoded]
+    [AcceptsMessagePack]
+    [AcceptsProtobuf]
+    [RequestModel<PaymentMethodDoc>]
+    public Task<IActionResult> PostPayment(CancellationToken ct)
+      => this.ParsedAsync(PaymentParser, pm => Ok(new { received = pm }), ct);
 
     // CSV eager
     [HttpPost("import-csv")]
@@ -166,6 +201,9 @@ public sealed class ParsedMvcController : ControllerBase
         },
         ct);
 }
+
+// Doc-only type to describe the payment request shape (type-discriminated)
+public sealed record PaymentMethodDoc(string paymentMethod, string? number, int? cvv, string? email);
 
 // Doc-only type to describe the CSV multipart request shape (no impact on parsing)
 public sealed record ImportCsvDoc(FileUpload<CsvFormat, CsvRow> file, string name);

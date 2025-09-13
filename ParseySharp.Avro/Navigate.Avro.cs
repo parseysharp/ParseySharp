@@ -7,15 +7,15 @@ public static class ParsePathNavAvro
 {
   // Navigator over Avro Generic values carried as 'object'
   public static readonly ParsePathNav<object> Avro =
-    new(
+    ParsePathNav<object>.Create(
       Prop: (node, name) =>
         node switch
         {
           GenericRecord rec =>
             (rec.Schema is RecordSchema rs && rs.Fields.Any(f => string.Equals(f.Name, name, StringComparison.Ordinal)))
-              ? Right<object, Option<object>>(Optional(rec[name]))
-              : Right<object, Option<object>>(None),
-          _ => Left<object, Option<object>>(node)
+              ? Right<Unknown<object>, Option<object>>(Optional(rec[name]))
+              : Right<Unknown<object>, Option<object>>(None),
+          _ => Left<Unknown<object>, Option<object>>(Unknown.New(node))
         },
 
       Index: (node, i) =>
@@ -23,29 +23,29 @@ public static class ParsePathNavAvro
         {
           System.Collections.IList list when i >= 0 =>
             (i < list.Count)
-              ? Right<object, Option<object>>(Optional(list[i]))
-              : Right<object, Option<object>>(None),
+              ? Right<Unknown<object>, Option<object>>(Optional(list[i]))
+              : Right<Unknown<object>, Option<object>>(None),
           IEnumerable<object?> seq when node is not string && i >= 0 =>
             ((Func<Seq<object?>>)(() => Seq(seq)))
               .Try<object, Seq<object?>>(_ => node)
               .Match(
-                Left: _ => Left<object, Option<object>>(node),
+                Left: _ => Left<Unknown<object>, Option<object>>(Unknown.New(node)),
                 Right: xs => (i < xs.Count)
-                  ? Right<object, Option<object>>(Optional(xs[i]))
-                  : Right<object, Option<object>>(None)
+                  ? Right<Unknown<object>, Option<object>>(Optional(xs[i]))
+                  : Right<Unknown<object>, Option<object>>(None)
               ),
-          _ => Left<object, Option<object>>(node)
+          _ => Left<Unknown<object>, Option<object>>(Unknown.New(node))
         },
 
       Unbox: node => node switch
       {
-        null => Right<object, Unknown<object>>(new Unknown<object>.None()),
-        string s => Right<object, Unknown<object>>(Unknown.New<object>(s)),
-        bool b => Right<object, Unknown<object>>(Unknown.New<object>(b)),
-        int i => Right<object, Unknown<object>>(Unknown.New<object>(i)),
-        long l => Right<object, Unknown<object>>(Unknown.New<object>(l)),
-        float f => Right<object, Unknown<object>>(Unknown.New<object>((double)f)),
-        double d => Right<object, Unknown<object>>(Unknown.New<object>(d)),
+        null => Right<Unknown<object>, Unknown<object>>(new Unknown<object>.None()),
+        string s => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(s)),
+        bool b => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(b)),
+        int i => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(i)),
+        long l => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(l)),
+        float f => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>((double)f)),
+        double d => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(d)),
         // Handle Avro decimal logical type when decoded as System.Decimal
         decimal m => ((Func<Unknown<object>>)(() =>
         {
@@ -69,8 +69,8 @@ public static class ParsePathNavAvro
         }))
         .Try<object, Unknown<object>>(_ => node)
         .Match(
-          Left: _ => Left<object, Unknown<object>>(node),
-          Right: v => Right<object, Unknown<object>>(v)
+          Left: _ => Left<Unknown<object>, Unknown<object>>(Unknown.New(node)),
+          Right: v => Right<Unknown<object>, Unknown<object>>(v)
         ),
         // Handle Avro.Util.AvroDecimal
         AvroDecimal am => ((Func<Unknown<object>>)(() =>
@@ -85,17 +85,18 @@ public static class ParsePathNavAvro
         }))
         .Try<object, Unknown<object>>(_ => node)
         .Match(
-          Left: _ => Left<object, Unknown<object>>(node),
-          Right: v => Right<object, Unknown<object>>(v)
+          Left: _ => Left<Unknown<object>, Unknown<object>>(Unknown.New(node)),
+          Right: v => Right<Unknown<object>, Unknown<object>>(v)
         ),
-        byte[] bytes => Right<object, Unknown<object>>(Unknown.New<object>(bytes)),
+        byte[] bytes => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(bytes)),
         // Expose sequences (Avro arrays) and records as nodes for further traversal
-        System.Collections.IEnumerable when node is not string => Right<object, Unknown<object>>(Unknown.New<object>(node)),
-        GenericRecord => Right<object, Unknown<object>>(Unknown.New<object>(node)),
+        System.Collections.IEnumerable when node is not string => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(node)),
+        GenericRecord => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(node)),
         // Avro Enum and Fixed: pass through as nodes (or map Fixed to bytes if desired later)
-        GenericEnum => Right<object, Unknown<object>>(Unknown.New<object>(node)),
-        GenericFixed gf => Right<object, Unknown<object>>(Unknown.New<object>(gf.Value)),
-        _ => Left<object, Unknown<object>>(node)
-      }
+        GenericEnum => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(node)),
+        GenericFixed gf => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(gf.Value)),
+        _ => Left<Unknown<object>, Unknown<object>>(Unknown.New(node))
+      },
+      CloneNode: x => x
     );
 }

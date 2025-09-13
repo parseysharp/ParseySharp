@@ -2,6 +2,12 @@ public abstract record Unknown<T>
 {
   public sealed record Value(T Get) : Unknown<T>;
   public sealed record None() : Unknown<T>;
+
+  public Unknown<U> Map<U>(Func<T, U> f) => Unknown.Match(
+    this,
+    Some: x => Unknown.New(f(x)),
+    None: () => new Unknown<U>.None()
+  );
 }
 
 public static class Unknown

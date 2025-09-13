@@ -54,7 +54,7 @@ public class ValueParse<A>(Func<Unknown<object>, Validation<Seq<ParsePathErr>, A
     input => input.Match(
       None: () => run(new Unknown<object>.None()),
       Some: i => nav.Unbox(i).Match(
-        Left: l => Fail<Seq<ParsePathErr>, A>([ParsePathErr.FromParseErr(new ParseErr("Could not unbox value", typeof(A).Name, Optional(l)), [])]),
+        Left: l => Fail<Seq<ParsePathErr>, A>([ParsePathErr.FromParseErr(new ParseErr("Could not unbox value", typeof(A).Name, l), [])]),
         Right: x => run(x)
       )
     );
@@ -90,7 +90,7 @@ public class OptionParse<A>(Parse<A> parser): Parse<Option<A>>
     input => input.Match(
      None: () => Success<Seq<ParsePathErr>, Option<A>>(None),
      Some: i => nav.Unbox(i).Match(
-       Left: l => Fail<Seq<ParsePathErr>, Option<A>>([ParsePathErr.FromParseErr(new ParseErr("Could not unbox value", typeof(A).Name, Optional(l)), [])]),
+       Left: l => Fail<Seq<ParsePathErr>, Option<A>>([ParsePathErr.FromParseErr(new ParseErr("Could not unbox value", typeof(A).Name, l), [])]),
        Right: x => x.Match(
         Some: x => parser.Run<B>(nav)(input).Map(Optional),
         None: () => Success<Seq<ParsePathErr>, Option<A>>(None))));

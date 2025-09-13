@@ -53,14 +53,13 @@ public static class PathParser
 
   public static Validation<Seq<ParsePathErr>, Option<B>> NextStep<B>(
     ListZipper<PathSeg> path,
-    Func<B, Either<object, Option<B>>> getNext,
+    Func<B, Either<Unknown<B>, Option<B>>> getNext,
     Func<Option<B>, Validation<Seq<ParsePathErr>, B>> runNext,
     Option<B> input
   ) => input.Match(
     None: () => runNext(None).Map(Some),
     Some: i => getNext(i).Match<Validation<Seq<ParsePathErr>, Option<B>>>(
-      // TODO - handle wrong type better
-      Left: (object x) => runNext(None).Map(Some),
+      Left: (Unknown<B> x) => runNext(None).Map(Some),
       Right: (Option<B> x) => x.Match(
         None: () => path.Nexts.IsEmpty
           ? Success<Seq<ParsePathErr>, Option<B>>(None)
@@ -72,7 +71,7 @@ public static class PathParser
 
   public static Validation<Seq<ParsePathErr>, Unknown<B>> NextStepU<B>(
     ListZipper<PathSeg> path,
-    Func<B, Either<object, Option<B>>> getNext,
+    Func<B, Either<Unknown<B>, Option<B>>> getNext,
     Func<Option<B>, Validation<Seq<ParsePathErr>, B>> runNext,
     Unknown<B> input
   ) => NextStep(path, getNext, runNext, input.ToOption()).Map(Unknown.UnsafeFromOption);
@@ -98,7 +97,7 @@ public static class PathParser
                   [new ParsePathErr(
                     $"Missing property {k.Name}",
                     Name,
-                    Optional(cur),
+                    cur.Map(nav.CloneNode),
                   PathSegRender.ToStrings(toSeq(z.Prevs.Reverse()))
                 )]),
                 cur
@@ -112,7 +111,7 @@ public static class PathParser
                   [new ParsePathErr(
                     $"Missing index {ix.I}",
                   Name,
-                  Optional(cur),
+                  cur.Map(nav.CloneNode),
                   PathSegRender.ToStrings(toSeq(z.Prevs.Reverse()))
                 )]),
                 cur
@@ -129,160 +128,243 @@ public static class PathParser
 
 }
 
-public readonly record struct ParsePathNav<S>(
-  Func<S, string, Either<object, Option<S>>> Prop,
-  Func<S, int, Either<object, Option<S>>> Index,
-  Func<S, Either<object, Unknown<object>>> Unbox
-);
+public record ParsePathNav<S>(
+  Func<S, string, Either<Unknown<S>, Option<S>>> UnsafeProp,
+  Func<S, int, Either<Unknown<S>, Option<S>>> UnsafeIndex,
+  Func<S, Either<Unknown<S>, Unknown<object>>> UnsafeUnbox,
+  Func<S, S> CloneNode
+)
+{
+
+  public static ParsePathNav<S> Create(
+    Func<S, string, Either<Unknown<S>, Option<S>>> Prop,
+    Func<S, int, Either<Unknown<S>, Option<S>>> Index,
+    Func<S, Either<Unknown<S>, Unknown<object>>> Unbox,
+    Func<S, S> CloneNode)
+    => new(Prop, Index, Unbox, CloneNode);
+
+  public Func<S, string, Either<Unknown<S>, Option<S>>> Prop => (node, name) =>
+    UnsafeProp(node, name).Match(
+      Left: l => Left<Unknown<S>, Option<S>>(CloneUnknown(l, CloneNode)),
+      Right: r => r
+    );
+
+  public Func<S, int, Either<Unknown<S>, Option<S>>> Index => (node, i) =>
+    UnsafeIndex(node, i).Match(
+      Left: l => Left<Unknown<S>, Option<S>>(CloneUnknown(l, CloneNode)),
+      Right: r => r
+    );
+
+  public Func<S, Either<Unknown<S>, Unknown<object>>> Unbox => node =>
+    UnsafeUnbox(node).Match(
+      Left: l => Left<Unknown<S>, Unknown<object>>(l),
+      Right: u => u.Match(
+        Some: v => Right<Unknown<S>, Unknown<object>>(Unknown.UnsafeFromOption<object>(Optional(DeepOwn(v, CloneNode)))),
+        None: () => Right<Unknown<S>, Unknown<object>>(new Unknown<object>.None())
+      )
+    );
+
+  static Unknown<S> CloneUnknown(Unknown<S> u, Func<S, S> clone)
+    => u.Map(clone);
+
+  static object? DeepOwn(object? v, Func<S, S> clone)
+  {
+    if (v is null) return null;
+    if (v is S node) return clone(node);
+    if (v is string || v is bool || v is int || v is long || v is double || v is float || v is decimal || v is Guid || v is DateTime || v is DateTimeOffset)
+      return v;
+    if (v is byte[] bytes) return bytes.ToArray();
+
+    if (v is System.Collections.IDictionary dict)
+    {
+      var obj = new Dictionary<string, object?>();
+      foreach (System.Collections.DictionaryEntry de in dict)
+      {
+        var key = de.Key?.ToString() ?? "null";
+        obj[key] = DeepOwn(de.Value, clone);
+      }
+      return obj;
+    }
+
+    if (v is System.Collections.IEnumerable seq && v is not string)
+    {
+      var list = new List<object?>();
+      var allS = true;
+      foreach (var item in seq)
+      {
+        var owned = DeepOwn(item, clone);
+        list.Add(owned);
+        if (owned is not S) allS = false;
+      }
+      if (allS)
+      {
+        // Preserve strong-typed sequence of carrier nodes to satisfy parsers expecting Seq<S>
+        var cast = list.Cast<S>();
+        return Seq(cast);
+      }
+      return list;
+    }
+
+    return v;
+  }
+}
 
 public static class ParsePathNav
 {
   public static readonly ParsePathNav<JsonElement> Json =
-  new(
+  ParsePathNav<JsonElement>.Create(
       Prop: (je, name) =>
         je.ValueKind == JsonValueKind.Object
-          ? Right<object, Option<JsonElement>>(Optional(je.TryGetProperty(name, out var v) ? v : default))
-          : Left<object, Option<JsonElement>>(je),
+          ? Right<Unknown<JsonElement>, Option<JsonElement>>(Optional(je.TryGetProperty(name, out var v) ? v : default))
+          : Left<Unknown<JsonElement>, Option<JsonElement>>(Unknown.New(je)),
 
       Index: (je, i) =>
         je.ValueKind == JsonValueKind.Array && i >= 0
           ? Optional(toSeq(je.EnumerateArray())).Filter(x => x.Count > i).Match(
-              None: () => Right<object, Option<JsonElement>>(None),
-            Some: v => Right<object, Option<JsonElement>>(Optional(v[i]))
+              None: () => Right<Unknown<JsonElement>, Option<JsonElement>>(None),
+            Some: v => Right<Unknown<JsonElement>, Option<JsonElement>>(Optional(v[i]))
           )
-          : Left<object, Option<JsonElement>>(je),
+          : Left<Unknown<JsonElement>, Option<JsonElement>>(Unknown.New(je)),
 
       Unbox: je => je.ValueKind switch
       {
-        JsonValueKind.String => Right<object, Unknown<object>>(Unknown.UnsafeFromOption(Optional<object>(je.GetString()))),
-        JsonValueKind.Number => je.TryGetInt32(out var i) ? Right<object, Unknown<object>>(Unknown.New<object>(i))
-                              : je.TryGetInt64(out var l) ? Right<object, Unknown<object>>(Unknown.New<object>(l))
-                              : je.TryGetDouble(out var d) ? Right<object, Unknown<object>>(Unknown.New<object>(d))
-                              : Left<object, Unknown<object>>(je),
-        JsonValueKind.True => Right<object, Unknown<object>>(Unknown.New<object>(true)),
-        JsonValueKind.False => Right<object, Unknown<object>>(Unknown.New<object>(false)),
-        JsonValueKind.Null => Right<object, Unknown<object>>(Unknown.UnsafeFromOption<object>(None)),
-        JsonValueKind.Array => Right<object, Unknown<object>>(Unknown.New<object>(je.EnumerateArray())),
-        _ => Left<object, Unknown<object>>(je)
-      }
+        JsonValueKind.String => Right<Unknown<JsonElement>, Unknown<object>>(Unknown.UnsafeFromOption(Optional<object>(je.GetString()))),
+        JsonValueKind.Number => je.TryGetInt32(out var i) ? Right<Unknown<JsonElement>, Unknown<object>>(Unknown.New<object>(i))
+                              : je.TryGetInt64(out var l) ? Right<Unknown<JsonElement>, Unknown<object>>(Unknown.New<object>(l))
+                              : je.TryGetDouble(out var d) ? Right<Unknown<JsonElement>, Unknown<object>>(Unknown.New<object>(d))
+                              : Left<Unknown<JsonElement>, Unknown<object>>(Unknown.New(je)),
+        JsonValueKind.True => Right<Unknown<JsonElement>, Unknown<object>>(Unknown.New<object>(true)),
+        JsonValueKind.False => Right<Unknown<JsonElement>, Unknown<object>>(Unknown.New<object>(false)),
+        JsonValueKind.Null => Right<Unknown<JsonElement>, Unknown<object>>(Unknown.UnsafeFromOption<object>(None)),
+        JsonValueKind.Undefined => Right<Unknown<JsonElement>, Unknown<object>>(Unknown.UnsafeFromOption<object>(None)),
+        JsonValueKind.Array => Right<Unknown<JsonElement>, Unknown<object>>(Unknown.New<object>(je.EnumerateArray())),
+        _ => Left<Unknown<JsonElement>, Unknown<object>>(Unknown.New(je))
+      },
+      CloneNode: je =>
+        je.ValueKind == JsonValueKind.Undefined
+          ? JsonDocument.Parse("null").RootElement.Clone()
+          : je.Clone()
     );
 
   public static readonly ParsePathNav<JsonNode> Nodes =
-    new(
+    ParsePathNav<JsonNode>.Create(
       Prop: (jn, name) =>
         jn is JsonObject obj
           ? (obj.TryGetPropertyValue(name, out var child)
-              ? Right<object, Option<JsonNode>>(Optional(child))
-              : Right<object, Option<JsonNode>>(None))
-          : Left<object, Option<JsonNode>>(jn),
+              ? Right<Unknown<JsonNode>, Option<JsonNode>>(Optional(child))
+              : Right<Unknown<JsonNode>, Option<JsonNode>>(None))
+          : Left<Unknown<JsonNode>, Option<JsonNode>>(Unknown.New(jn)),
 
       Index: (jn, i) =>
         jn is JsonArray arr && i >= 0
           ? (i < arr.Count
-              ? Right<object, Option<JsonNode>>(Optional(arr[i]))
-              : Right<object, Option<JsonNode>>(None))
-          : Left<object, Option<JsonNode>>(jn),
+              ? Right<Unknown<JsonNode>, Option<JsonNode>>(Optional(arr[i]))
+              : Right<Unknown<JsonNode>, Option<JsonNode>>(None))
+          : Left<Unknown<JsonNode>, Option<JsonNode>>(Unknown.New(jn)),
 
       Unbox: jn =>
         jn switch
         {
-          null => Left<object, Unknown<object>>(jn!),
-          JsonArray arr => Right<object, Unknown<object>>(Unknown.New<object>(arr)),
-          JsonObject => Right<object, Unknown<object>>(Unknown.New<object>(jn)),
+          null => Right<Unknown<JsonNode>, Unknown<object>>(new Unknown<object>.None()),
+          JsonArray arr => Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(arr)),
+          JsonObject => Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(jn)),
           JsonValue v =>
-            v.TryGetValue<int>(out var iv)    ? Right<object, Unknown<object>>(Unknown.New<object>(iv)) :
-            v.TryGetValue<long>(out var lv)   ? Right<object, Unknown<object>>(Unknown.New<object>(lv)) :
-            v.TryGetValue<double>(out var dv) ? Right<object, Unknown<object>>(Unknown.New<object>(dv)) :
-            v.TryGetValue<bool>(out var bv)   ? Right<object, Unknown<object>>(Unknown.New<object>(bv)) :
+            v.TryGetValue<int>(out var iv)    ? Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(iv)) :
+            v.TryGetValue<long>(out var lv)   ? Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(lv)) :
+            v.TryGetValue<double>(out var dv) ? Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(dv)) :
+            v.TryGetValue<bool>(out var bv)   ? Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(bv)) :
             v.TryGetValue<string>(out var sv) ? (string.IsNullOrWhiteSpace(sv)
-                                                  ? Right<object, Unknown<object>>(Unknown.UnsafeFromOption<object>(None))
-                                                  : Right<object, Unknown<object>>(Unknown.New<object>(sv)))
-                                              : Right<object, Unknown<object>>(Unknown.UnsafeFromOption<object>(None)),
-          _ => Left<object, Unknown<object>>(jn)
-        }
+                                                  ? Right<Unknown<JsonNode>, Unknown<object>>(Unknown.UnsafeFromOption<object>(None))
+                                                  : Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(sv)))
+                                              : Right<Unknown<JsonNode>, Unknown<object>>(Unknown.UnsafeFromOption<object>(None)),
+          _ => Left<Unknown<JsonNode>, Unknown<object>>(Unknown.New(jn))
+        },
+      CloneNode: jn => jn
     );
 
   public static readonly ParsePathNav<XElement> Xml =
-    new(
+    ParsePathNav<XElement>.Create(
       Prop: (xe, name) =>
         xe is null
-          ? Left<object, Option<XElement>>(None)
+          ? Left<Unknown<XElement>, Option<XElement>>(new Unknown<XElement>.None())
           : name.StartsWith('@')
             ? // Attribute access via @attr convention
               Optional(xe.Attribute(name[1..])).Match(
-                Some: a => Right<object, Option<XElement>>(Optional(new XElement("@attr", a.Value))),
-                None: () => Right<object, Option<XElement>>(None)
+                Some: a => Right<Unknown<XElement>, Option<XElement>>(Optional(new XElement("@attr", a.Value))),
+                None: () => Right<Unknown<XElement>, Option<XElement>>(None)
               )
             : toSeq(xe.Elements()).Find(e => e.Name.LocalName == name)
                 .Match(
-                  Some: e => Right<object, Option<XElement>>(Optional(e)),
-                  None: () => Right<object, Option<XElement>>(None)
+                  Some: e => Right<Unknown<XElement>, Option<XElement>>(Optional(e)),
+                  None: () => Right<Unknown<XElement>, Option<XElement>>(None)
                 ),
 
       Index: (xe, i) =>
         xe is null || i < 0
-          ? Left<object, Option<XElement>>(xe!)
+          ? Left<Unknown<XElement>, Option<XElement>>(xe is null ? new Unknown<XElement>.None() : Unknown.New(xe))
           : Optional(Seq(xe.Elements())).Filter(es => es.Count > i).Match(
-              None: () => Right<object, Option<XElement>>(None),
-              Some: es => Right<object, Option<XElement>>(Optional(es[i]))
+              None: () => Right<Unknown<XElement>, Option<XElement>>(None),
+              Some: es => Right<Unknown<XElement>, Option<XElement>>(Optional(es[i]))
             ),
 
       Unbox: xe =>
         xe is null
-          ? Right<object, Unknown<object>>(new Unknown<object>.None())
+          ? Right<Unknown<XElement>, Unknown<object>>(new Unknown<object>.None())
           : xe.HasElements
-            ? Right<object, Unknown<object>>(Unknown.New<object>(xe.Elements()))
+            ? Right<Unknown<XElement>, Unknown<object>>(Unknown.New<object>(xe.Elements()))
             : string.IsNullOrWhiteSpace(xe.Value)
-              ? Right<object, Unknown<object>>(Unknown.UnsafeFromOption<object>(None))
+              ? Right<Unknown<XElement>, Unknown<object>>(Unknown.UnsafeFromOption<object>(None))
               : xe.Value switch
                 {
-                  var s when int.TryParse(s, out var iv)    => Right<object, Unknown<object>>(Unknown.New<object>(iv)),
-                  var s when long.TryParse(s, out var lv)   => Right<object, Unknown<object>>(Unknown.New<object>(lv)),
-                  var s when double.TryParse(s, out var dv) => Right<object, Unknown<object>>(Unknown.New<object>(dv)),
-                  var s when bool.TryParse(s, out var bv)   => Right<object, Unknown<object>>(Unknown.New<object>(bv)),
-                  var s                                     => Right<object, Unknown<object>>(Unknown.New<object>(s))
-                }
+                  var s when int.TryParse(s, out var iv)    => Right<Unknown<XElement>, Unknown<object>>(Unknown.New<object>(iv)),
+                  var s when long.TryParse(s, out var lv)   => Right<Unknown<XElement>, Unknown<object>>(Unknown.New<object>(lv)),
+                  var s when double.TryParse(s, out var dv) => Right<Unknown<XElement>, Unknown<object>>(Unknown.New<object>(dv)),
+                  var s when bool.TryParse(s, out var bv)   => Right<Unknown<XElement>, Unknown<object>>(Unknown.New<object>(bv)),
+                  var s                                     => Right<Unknown<XElement>, Unknown<object>>(Unknown.New<object>(s))
+                },
+      CloneNode: xe => new XElement(xe)
     );
 
   public static readonly ParsePathNav<object> Object =
-    new(
+    ParsePathNav<object>.Create(
       Prop: (node, name) =>
         node switch
         {
           // For dictionary-like carriers, absence of a key should yield Optional(None), not Left.
-          IReadOnlyDictionary<string, object?> rd => Right<object, Option<object>>(Optional(rd.TryGetValue(name, out var v1) ? v1 : null)),
-          IDictionary<string, object?> d => Right<object, Option<object>>(Optional(d.TryGetValue(name, out var v2) ? v2 : null)),
-          System.Collections.IDictionary legacy => Right<object, Option<object>>(Optional(legacy.Contains(name) ? legacy[name] : null)),
-          _ => Left<object, Option<object>>(node) 
+          IReadOnlyDictionary<string, object?> rd => Right<Unknown<object>, Option<object>>(Optional(rd.TryGetValue(name, out var v1) ? v1 : null)),
+          IDictionary<string, object?> d => Right<Unknown<object>, Option<object>>(Optional(d.TryGetValue(name, out var v2) ? v2 : null)),
+          System.Collections.IDictionary legacy => Right<Unknown<object>, Option<object>>(Optional(legacy.Contains(name) ? legacy[name] : null)),
+          _ => Left<Unknown<object>, Option<object>>(Unknown.New(node)) 
         },
 
       Index: (node, i) =>
         node switch
         {
-          IList<object?> list when i >= 0 && i < list.Count => Right<object, Option<object>>(Optional(list[i])),
+          IList<object?> list when i >= 0 && i < list.Count => Right<Unknown<object>, Option<object>>(Optional(list[i])),
           IEnumerable<object?> seq when node is not string && i >= 0 =>
               ((Func<Seq<object?>>)(() => Seq(seq))).Try<object, Seq<object?>>(_ => node).Match(
-                Left: _ => Left<object, Option<object>>(node),
+                Left: _ => Left<Unknown<object>, Option<object>>(Unknown.New(node)),
                 Right: xs => Optional(xs).Filter(x => x.Count > i).Match(
-                  None: () => Right<object, Option<object>>(None),
-                  Some: x => Right<object, Option<object>>(Optional(x[i]))
+                  None: () => Right<Unknown<object>, Option<object>>(None),
+                  Some: x => Right<Unknown<object>, Option<object>>(Optional(x[i]))
                 )
               ),
-          _ => Left<object, Option<object>>(node)
+          _ => Left<Unknown<object>, Option<object>>(Unknown.New(node))
         },
 
-      Unbox: x => Right<object, Unknown<object>>(Unknown.New(x))
+      Unbox: x => Right<Unknown<object>, Unknown<object>>(Unknown.New(x)),
+      CloneNode: x => x
     );
 
-  static Either<object, Option<object>> ReflectGet(object node, string name)
+  static Either<Unknown<object>, Option<object>> ReflectGet(object node, string name)
   {
     var t = node.GetType();
 
     var p = t.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase);
     if (p is not null && p.GetIndexParameters().Length == 0)
       return ((Func<object?>)(() => p.GetValue(node))).Try<object, object?>(_ => node).Match(
-        Left: _ => Left<object, Option<object>>(node),
-        Right: v => Right<object, Option<object>>(UnwrapOptionToPath(v))
+        Left: _ => Left<Unknown<object>, Option<object>>(Unknown.New(node)),
+        Right: v => Right<Unknown<object>, Option<object>>(UnwrapOptionToPath(v))
       );
 
     var pj = t.GetProperties(BindingFlags.Instance | BindingFlags.Public)
@@ -291,18 +373,18 @@ public static class ParsePathNav
                   pp.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name == name);
     if (pj is not null)
       return ((Func<object?>)(() => pj.GetValue(node))).Try<object, object?>(_ => node).Match(
-        Left: _ => Left<object, Option<object>>(node),
-        Right: v => Right<object, Option<object>>(UnwrapOptionToPath(v))
+        Left: _ => Left<Unknown<object>, Option<object>>(Unknown.New(node)),
+        Right: v => Right<Unknown<object>, Option<object>>(UnwrapOptionToPath(v))
       );
 
     var f = t.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase);
     if (f is not null)
       return ((Func<object?>)(() => f.GetValue(node))).Try<object, object?>(_ => node).Match(
-        Left: _ => Left<object, Option<object>>(node),
-        Right: v => Right<object, Option<object>>(UnwrapOptionToPath(v))
+        Left: _ => Left<Unknown<object>, Option<object>>(Unknown.New(node)),
+        Right: v => Right<Unknown<object>, Option<object>>(UnwrapOptionToPath(v))
       );
 
-    return Right<object, Option<object>>(None);
+    return Right<Unknown<object>, Option<object>>(None);
   }
 
   static Option<object> UnwrapOptionToPath(object? v)
@@ -344,26 +426,27 @@ public static class ParsePathNav
   }
 
   public static readonly ParsePathNav<object> Reflect =
-    new(
+    ParsePathNav<object>.Create(
       Prop: ReflectGet,
       Index: Object.Index,
-      Unbox: Object.Unbox
+      Unbox: Object.Unbox,
+      CloneNode: x => x
     );
 
   // ADO.NET data navigator that surfaces cell values (not rows)
   public static readonly ParsePathNav<object> Data =
-    new(
+    ParsePathNav<object>.Create(
       Prop: (node, name) =>
         node switch
         {
           IDataRecord r =>
             TryGetOrdinal(r, name).Match(
-              None: () => Right<object, Option<object>>(None),
+              None: () => Right<Unknown<object>, Option<object>>(None),
               Some: ord => ((Func<object?>)(() => r.IsDBNull(ord) ? null : r.GetValue(ord)))
                             .Try<object, object?>(_ => node)
                             .Match(
-                              Left: _ => Left<object, Option<object>>(node),
-                              Right: v => Right<object, Option<object>>(Optional(v))
+                              Left: _ => Left<Unknown<object>, Option<object>>(Unknown.New(node)),
+                              Right: v => Right<Unknown<object>, Option<object>>(Optional(v))
                             )
             ),
           DataRow row =>
@@ -371,11 +454,11 @@ public static class ParsePathNav
               ? ((Func<object?>)(() => row[name]))
                   .Try<object, object?>(_ => node)
                   .Match(
-                    Left: _ => Left<object, Option<object>>(node),
-                    Right: v => Right<object, Option<object>>(Optional(v is DBNull ? null : v))
+                    Left: _ => Left<Unknown<object>, Option<object>>(Unknown.New(node)),
+                    Right: v => Right<Unknown<object>, Option<object>>(Optional(v is DBNull ? null : v))
                   )
-              : Right<object, Option<object>>(None),
-          _ => Left<object, Option<object>>(node)
+              : Right<Unknown<object>, Option<object>>(None),
+          _ => Left<Unknown<object>, Option<object>>(Unknown.New(node))
         },
 
       Index: (node, i) =>
@@ -383,30 +466,31 @@ public static class ParsePathNav
         {
           IDataRecord r =>
             (i < 0)
-              ? Left<object, Option<object>>(node)
+              ? Left<Unknown<object>, Option<object>>(Unknown.New(node))
               : (i < r.FieldCount)
                 ? ((Func<object?>)(() => r.IsDBNull(i) ? null : r.GetValue(i)))
                     .Try<object, object?>(_ => node)
                     .Match(
-                      Left: _ => Left<object, Option<object>>(node),
-                      Right: v => Right<object, Option<object>>(Optional(v))
+                      Left: _ => Left<Unknown<object>, Option<object>>(Unknown.New(node)),
+                      Right: v => Right<Unknown<object>, Option<object>>(Optional(v))
                     )
-                : Right<object, Option<object>>(None),
+                : Right<Unknown<object>, Option<object>>(None),
           DataRow row =>
             (i < 0 || row.Table is null)
-              ? Left<object, Option<object>>(node)
+              ? Left<Unknown<object>, Option<object>>(Unknown.New(node))
               : (i < row.Table.Columns.Count)
                 ? ((Func<object?>)(() => row[i]))
                     .Try<object, object?>(_ => node)
                     .Match(
-                      Left: _ => Left<object, Option<object>>(node),
-                      Right: v => Right<object, Option<object>>(Optional(v is DBNull ? null : v))
+                      Left: _ => Left<Unknown<object>, Option<object>>(Unknown.New(node)),
+                      Right: v => Right<Unknown<object>, Option<object>>(Optional(v is DBNull ? null : v))
                     )
-                : Right<object, Option<object>>(None),
-          _ => Left<object, Option<object>>(node)
+                : Right<Unknown<object>, Option<object>>(None),
+          _ => Left<Unknown<object>, Option<object>>(Unknown.New(node))
         },
 
-      Unbox: x => Object.Unbox(x)
+      Unbox: x => Object.Unbox(x),
+      CloneNode: x => x
     );
 
   static Option<int> TryGetOrdinal(IDataRecord r, string name)

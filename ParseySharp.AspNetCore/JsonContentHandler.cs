@@ -37,5 +37,5 @@ internal sealed class JsonContentHandler : IContentHandler
     return Fail<Seq<ParsePathErr>, A>([ new ParsePathErr("Unsupported JSON carrier", typeof(A).Name, None, []) ]);
   }
 
-  public IEnumerable<string> SupportedContentTypes => new[] { "application/json" };
+  public IEnumerable<string> SupportedContentTypes => ["application/json"];
 }
