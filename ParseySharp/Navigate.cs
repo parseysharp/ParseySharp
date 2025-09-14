@@ -145,13 +145,13 @@ public record ParsePathNav<S>(
 
   public Func<S, string, Either<Unknown<S>, Option<S>>> Prop => (node, name) =>
     UnsafeProp(node, name).Match(
-      Left: l => Left<Unknown<S>, Option<S>>(CloneUnknown(l, CloneNode)),
+      Left: l => Left<Unknown<S>, Option<S>>(l.Map(CloneNode)),
       Right: r => r
     );
 
   public Func<S, int, Either<Unknown<S>, Option<S>>> Index => (node, i) =>
     UnsafeIndex(node, i).Match(
-      Left: l => Left<Unknown<S>, Option<S>>(CloneUnknown(l, CloneNode)),
+      Left: l => Left<Unknown<S>, Option<S>>(l.Map(CloneNode)),
       Right: r => r
     );
 
@@ -163,9 +163,6 @@ public record ParsePathNav<S>(
         None: () => Right<Unknown<S>, Unknown<object>>(new Unknown<object>.None())
       )
     );
-
-  static Unknown<S> CloneUnknown(Unknown<S> u, Func<S, S> clone)
-    => u.Map(clone);
 
   static object? DeepOwn(object? v, Func<S, S> clone)
   {

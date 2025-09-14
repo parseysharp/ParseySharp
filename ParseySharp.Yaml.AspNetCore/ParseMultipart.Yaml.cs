@@ -5,7 +5,10 @@ namespace ParseySharp.AspNetCore;
 public static class ParseMultipartYaml
 {
   public static Parse<T> YamlAt<T>(string name, Parse<T> parser)
-    => ParseMultipart.FileAt(name).Filter(fp =>
+    => ParseMultipart.FileAt(name).Bind(fp => YamlAt(fp, parser)).As();
+
+  public static Parse<T> YamlAt<T>(FilePart fp, Parse<T> parser)
+    => Parse.Pure(fp).As().Filter(fp =>
     {
       try
       {

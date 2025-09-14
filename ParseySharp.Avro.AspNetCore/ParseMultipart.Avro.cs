@@ -6,9 +6,12 @@ namespace ParseySharp.AspNetCore;
 
 public static class ParseMultipartAvro
 {
-  // Unified helper: auto-detect OCF; otherwise require writer schema via overload
+
   public static Parse<T> AvroAt<T>(string name, Parse<T> parser)
-    => ParseMultipart.FileAt(name).Filter(fp =>
+    => ParseMultipart.FileAt(name).Bind(fp => AvroAt(fp, parser)).As();
+
+  public static Parse<T> AvroAt<T>(FilePart fp, Parse<T> parser)
+    => Parse.Pure(fp).As().Filter(fp =>
     {
       try
       {
@@ -27,13 +30,16 @@ public static class ParseMultipartAvro
       catch (Exception ex)
       {
         return Fail<Seq<ParsePathErr>, T>([
-          new ParsePathErr($"Invalid Avro: {ex.Message}", typeof(T).Name, Some((object)name), [])
+          new ParsePathErr($"Invalid Avro: {ex.Message}", typeof(T).Name, Some((object)fp.FileName), [])
         ]);
       }
     });
 
   public static Parse<T> AvroAt<T>(string name, Parse<T> parser, Schema writerSchema)
-    => ParseMultipart.FileAt(name).Filter(fp =>
+    => ParseMultipart.FileAt(name).Bind(fp => AvroAt(fp, parser, writerSchema)).As();
+
+  public static Parse<T> AvroAt<T>(FilePart fp, Parse<T> parser, Schema writerSchema)
+    => Parse.Pure(fp).As().Filter(fp =>
     {
       try
       {
@@ -44,7 +50,7 @@ public static class ParseMultipartAvro
 
         return eTop.Match(
           Left: err => Fail<Seq<ParsePathErr>, T>([
-            new ParsePathErr(err, typeof(T).Name, Some((object)name), [])
+            new ParsePathErr(err, typeof(T).Name, Some((object)fp.FileName), [])
           ]),
           Right: top => ParseExtensions.RunWithNav(parser, ParseySharp.Avro.ParsePathNavAvro.Avro)(top)
         );
@@ -52,14 +58,18 @@ public static class ParseMultipartAvro
       catch (Exception ex)
       {
         return Fail<Seq<ParsePathErr>, T>([
-          new ParsePathErr($"Invalid Avro: {ex.Message}", typeof(T).Name, Some((object)name), [])
+          new ParsePathErr($"Invalid Avro: {ex.Message}", typeof(T).Name, Some((object)fp.FileName), [])
         ]);
       }
     });
 
   // STREAMING OCF: yield per-record validations without materializing entire file
   public static Parse<IAsyncEnumerable<Validation<Seq<ParsePathErr>, T>>> AvroStream<T>(string name, Parse<T> elementParser)
-    => ParseMultipart.FileAt(name).Filter(fp =>
+    => ParseMultipart.FileAt(name).Bind(fp => AvroStream(fp, elementParser)).As();
+
+  // STREAMING OCF from an already obtained FilePart
+  public static Parse<IAsyncEnumerable<Validation<Seq<ParsePathErr>, T>>> AvroStream<T>(FilePart fp, Parse<T> elementParser)
+    => Parse.Pure(fp).As().Filter(_ =>
       Success<Seq<ParsePathErr>, IAsyncEnumerable<Validation<Seq<ParsePathErr>, T>>>(
         AvroStreamIterator(fp, elementParser)
       )

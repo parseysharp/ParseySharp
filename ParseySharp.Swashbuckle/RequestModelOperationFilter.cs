@@ -4,6 +4,7 @@ using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.Interfaces;
 using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.SwaggerGen;
+using ParseySharp.AspNetCore;
 
 // Uses the existing RequestModelMetadata added by SetRequestModel<T>()
 // - If an operation has a requestBody, set its schema to the declared model
@@ -123,6 +124,7 @@ public sealed class RequestModelOperationFilter : IOperationFilter
       {
         if (!p.CanRead) continue;
         var propSchema = ctx.SchemaGenerator.GenerateSchema(p.PropertyType, ctx.SchemaRepository);
+        propSchema = CoerceEnumSchemaIfNeeded(propSchema, p.PropertyType);
         operation.Parameters.Add(new OpenApiParameter
         {
           Name = p.Name,
@@ -139,6 +141,10 @@ public sealed class RequestModelOperationFilter : IOperationFilter
       var name = kv.Key;
       var propSchema = kv.Value;
       var required = requiredSet != null && requiredSet.Contains(name);
+      // If we can locate the CLR property and it's an enum (or array/nullable of enum), coerce to string enum
+      var pi = n.RequestType.GetProperty(name, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.IgnoreCase);
+      if (pi is not null)
+        propSchema = CoerceEnumSchemaIfNeeded(propSchema, pi.PropertyType);
       operation.Parameters.Add(new OpenApiParameter
       {
         Name = name,
@@ -191,13 +197,140 @@ public sealed class RequestModelOperationFilter : IOperationFilter
             ? sb.ToString()
             : operation.Description + "\n\n" + sb.ToString();
         }
+
+        // Append format selector information if present (from x-formatSelectors)
+        if (content.Schema.Extensions != null && content.Schema.Extensions.TryGetValue("x-formatSelectors", out var ext) && ext is OpenApiObject fmtObj && fmtObj.Count > 0)
+        {
+          var sb = new System.Text.StringBuilder();
+          sb.AppendLine();
+          sb.AppendLine("Formats:");
+          foreach (var kv in fmtObj)
+          {
+            var fieldName = kv.Key;
+            if (kv.Value is OpenApiArray arr)
+            {
+              var pairs = new List<string>();
+              foreach (var any in arr)
+              {
+                if (any is OpenApiObject o && o.TryGetValue("name", out var nameAny) && o.TryGetValue("contentType", out var ctAny))
+                {
+                  var fmtName = (nameAny as OpenApiString)?.Value ?? "";
+                  var ct = (ctAny as OpenApiString)?.Value ?? "application/octet-stream";
+                  pairs.Add($"{fmtName} ({ct})");
+                }
+              }
+              if (pairs.Count > 0)
+                sb.AppendLine($"- {fieldName}: one of {string.Join(", ", pairs)}");
+            }
+          }
+          var txt = sb.ToString();
+          if (!string.IsNullOrWhiteSpace(txt))
+          {
+            operation.Description = string.IsNullOrWhiteSpace(operation.Description)
+              ? txt
+              : operation.Description + "\n\n" + txt;
+          }
+        }
       }
       else
       {
         // Other media types: use the normalized schema directly
         content.Schema = n.Schema;
+        // Coerce enum properties within the request model to string enums
+        CoerceEnumPropertiesRecursive(content.Schema, n.RequestType, context.SchemaRepository);
       }
     }
+  }
+
+  private static OpenApiSchema CoerceEnumSchemaIfNeeded(OpenApiSchema schema, Type clrType)
+  {
+    // Handle Nullable<T>
+    var t = Nullable.GetUnderlyingType(clrType) ?? clrType;
+
+    // Arrays / IEnumerable<T>
+    if (t.IsArray)
+    {
+      var elem = t.GetElementType()!;
+      if (schema.Items is not null)
+        schema.Items = CoerceEnumSchemaIfNeeded(schema.Items, elem);
+      return schema;
+    }
+
+    var ienum = GetIEnumerableElementType(t);
+    if (ienum is not null && schema.Items is not null)
+    {
+      schema.Items = CoerceEnumSchemaIfNeeded(schema.Items, ienum);
+      return schema;
+    }
+
+    if (t.IsEnum)
+    {
+      // Break component references for enum properties so we can inline string-enum
+      schema.Reference = null;
+      schema.AllOf = null;
+      schema.OneOf = null;
+      schema.AnyOf = null;
+      schema.Type = "string";
+      schema.Format = null;
+      var names = System.Enum.GetNames(t);
+      schema.Enum = names.Select(n => (IOpenApiAny)new OpenApiString(n)).ToList();
+      // If previous Default/Example were numeric, replace with first name example
+      if (schema.Default is OpenApiInteger || schema.Default is OpenApiLong || schema.Default is OpenApiDouble)
+        schema.Default = new OpenApiString(names.First());
+      if (schema.Example is null || schema.Example is OpenApiInteger || schema.Example is OpenApiLong || schema.Example is OpenApiDouble)
+        schema.Example = new OpenApiString(names.First());
+      return schema;
+    }
+
+    return schema;
+  }
+
+  private static void CoerceEnumPropertiesRecursive(OpenApiSchema schema, Type clrType, SchemaRepository repo)
+  {
+    var (props, _) = ResolveProperties(schema, repo);
+    if (props is null || props.Count == 0) return;
+
+    var bindingFlags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.IgnoreCase;
+    foreach (var kv in props)
+    {
+      var name = kv.Key;
+      var propSchema = kv.Value;
+      var pi = clrType.GetProperty(name, bindingFlags);
+      if (pi is null) continue;
+
+      props[name] = CoerceEnumSchemaIfNeeded(propSchema, pi.PropertyType);
+
+      // Recurse into nested object graphs
+      var innerType = Nullable.GetUnderlyingType(pi.PropertyType) ?? pi.PropertyType;
+      if (!innerType.IsPrimitive && !innerType.IsEnum && innerType != typeof(string))
+      {
+        // Array / IEnumerable element recursion
+        if (innerType.IsArray && propSchema.Items is not null)
+        {
+          var elem = innerType.GetElementType()!;
+          CoerceEnumPropertiesRecursive(propSchema.Items, elem, repo);
+        }
+        else
+        {
+          var elemI = GetIEnumerableElementType(innerType);
+          if (elemI is not null && propSchema.Items is not null)
+            CoerceEnumPropertiesRecursive(propSchema.Items, elemI, repo);
+          else
+            CoerceEnumPropertiesRecursive(propSchema, innerType, repo);
+        }
+      }
+    }
+  }
+
+  private static Type? GetIEnumerableElementType(Type t)
+  {
+    if (!typeof(System.Collections.IEnumerable).IsAssignableFrom(t)) return null;
+    if (t.IsGenericType)
+    {
+      var ga = t.GetGenericArguments();
+      if (ga.Length == 1) return ga[0];
+    }
+    return null;
   }
 
   private static bool IsIFormFileType(Type t)
@@ -225,6 +358,8 @@ public sealed class RequestModelOperationFilter : IOperationFilter
     var enc = new Dictionary<string, OpenApiEncoding>(StringComparer.OrdinalIgnoreCase);
     var parts = new List<FilePartDoc>();
     var others = new List<string>();
+    // Collect format selectors to later render in description; store as an OpenAPI extension on the schema
+    var formatSelectors = new Dictionary<string, IReadOnlyList<FormatInfo>>(StringComparer.OrdinalIgnoreCase);
 
     var props = requestType.GetProperties(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public)
       .Where(p => p.CanRead);
@@ -292,6 +427,20 @@ public sealed class RequestModelOperationFilter : IOperationFilter
         continue;
       }
 
+      // Recognize FormatName<TTag> and emit string-enum using registered infos
+      if (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(FormatName<>))
+      {
+        var tag = t.GetGenericArguments()[0];
+        if (FileWithFormatDocRegistry.TryGetInfos(tag, out var infos))
+        {
+          var s = new OpenApiSchema { Type = "string" };
+          s.Enum = infos.Select(fi => (IOpenApiAny)new OpenApiString(fi.Name)).ToList();
+          schema.Properties[name] = s;
+          formatSelectors[name] = infos;
+          continue;
+        }
+      }
+
       // Fallback: leave as simple string for multipart; detailed schema is available in other content types
       schema.Properties[name] = new OpenApiSchema { Type = "string" };
       others.Add(name);
@@ -300,6 +449,28 @@ public sealed class RequestModelOperationFilter : IOperationFilter
     // If we didn't detect any properties, fall back to provided schema
     if (schema.Properties.Count == 0)
       return (fallback, enc, parts, others);
+
+    // If we collected any format selectors, persist them in an extension so ApplyBody can render a concise description
+    if (formatSelectors.Count > 0)
+    {
+      var obj = new OpenApiObject();
+      foreach (var kv in formatSelectors)
+      {
+        var arr = new OpenApiArray();
+        foreach (var fi in kv.Value)
+        {
+          var item = new OpenApiObject
+          {
+            ["name"] = new OpenApiString(fi.Name),
+            ["contentType"] = new OpenApiString(fi.ContentType)
+          };
+          arr.Add(item);
+        }
+        obj[kv.Key] = arr;
+      }
+      schema.Extensions ??= new Dictionary<string, IOpenApiExtension>();
+      schema.Extensions["x-formatSelectors"] = obj;
+    }
 
     return (schema, enc, parts, others);
   }

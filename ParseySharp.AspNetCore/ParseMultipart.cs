@@ -71,7 +71,14 @@ public static partial class ParseMultipart
     bool hasHeader,
     Parse<T> lineParser,
     Func<TextReader, IEnumerable<string[]>> rows)
-    => FileAt(name).Filter(fp =>
+    => FileAt(name).Bind(fp => CsvAt(fp, hasHeader, lineParser, rows)).As();
+
+  public static Parse<Seq<T>> CsvAt<T>(
+    FilePart fp,
+    bool hasHeader,
+    Parse<T> lineParser,
+    Func<TextReader, IEnumerable<string[]>> rows) =>
+    Parse.Pure(fp).As().Filter(fp =>
     {
       try
       {
@@ -91,7 +98,7 @@ public static partial class ParseMultipart
       }
       catch (Exception ex)
       {
-        return Fail<Seq<ParsePathErr>, Seq<T>>([ new ParsePathErr($"Invalid CSV: {ex.Message}", typeof(T).Name, Some((object)name), []) ]);
+        return Fail<Seq<ParsePathErr>, Seq<T>>([ new ParsePathErr($"Invalid CSV: {ex.Message}", typeof(T).Name, Some((object)fp.FileName), []) ]);
       }
     });
 
@@ -102,19 +109,37 @@ public static partial class ParseMultipart
   public static Parse<Seq<T>> CsvAt<T>(string name, bool hasHeader, Parse<T> lineParser)
     => CsvAt(name, hasHeader, lineParser, r => ParseCsv(r.ReadToEnd()));
 
+  // Convenience overload using default CSV reader from an already obtained FilePart
+  public static Parse<Seq<T>> CsvAt<T>(FilePart file, bool hasHeader, Parse<T> lineParser)
+    => CsvAt(file, hasHeader, lineParser, r => ParseCsv(r.ReadToEnd()));
+
   // STREAMING CSV: yield per-line validations without materializing entire file
   public static Parse<IAsyncEnumerable<Validation<Seq<ParsePathErr>, T>>> CsvStream<T>(
     string name,
     bool hasHeader,
     Parse<T> lineParser)
-    => CsvStream(name, hasHeader, lineParser, DefaultCsvRowsAsync);
+    => FileAt(name).Bind(fp => CsvStream(fp, hasHeader, lineParser, DefaultCsvRowsAsync)).As();
 
   public static Parse<IAsyncEnumerable<Validation<Seq<ParsePathErr>, T>>> CsvStream<T>(
     string name,
     bool hasHeader,
     Parse<T> lineParser,
     Func<TextReader, IAsyncEnumerable<string[]>> rowsAsync)
-    => FileAt(name).Filter(fp =>
+    => FileAt(name).Bind(fp => CsvStream(fp, hasHeader, lineParser, rowsAsync)).As();
+
+  // STREAMING CSV from an already obtained FilePart
+  public static Parse<IAsyncEnumerable<Validation<Seq<ParsePathErr>, T>>> CsvStream<T>(
+    FilePart fp,
+    bool hasHeader,
+    Parse<T> lineParser)
+    => CsvStream(fp, hasHeader, lineParser, DefaultCsvRowsAsync);
+
+  public static Parse<IAsyncEnumerable<Validation<Seq<ParsePathErr>, T>>> CsvStream<T>(
+    FilePart fp,
+    bool hasHeader,
+    Parse<T> lineParser,
+    Func<TextReader, IAsyncEnumerable<string[]>> rowsAsync)
+    => Parse.Pure(fp).As().Filter(_ =>
       Success<Seq<ParsePathErr>, IAsyncEnumerable<Validation<Seq<ParsePathErr>, T>>>(
         CsvStreamIterator(fp, hasHeader, lineParser, rowsAsync)
       )
@@ -199,17 +224,28 @@ public static partial class ParseMultipart
   public static Parse<IAsyncEnumerable<Validation<Seq<ParsePathErr>, T>>> NdjsonStream<T>(
     string name,
     Parse<T> lineParser)
-    => FileAt(name).Filter(fp =>
+    => FileAt(name).Bind(fp => NdjsonStream(fp, lineParser)).As();
+
+  // STREAMING NDJSON from an already obtained FilePart
+  public static Parse<IAsyncEnumerable<Validation<Seq<ParsePathErr>, T>>> NdjsonStream<T>(
+    FilePart fp,
+    Parse<T> lineParser)
+    => Parse.Pure(fp).As().Filter(_ =>
       Success<Seq<ParsePathErr>, IAsyncEnumerable<Validation<Seq<ParsePathErr>, T>>>(
         NdjsonIterator(fp, lineParser)
       )
     );
 
-  // EAGER NDJSON: read all lines, build a JSON array, and traverse with lineParser.Seq()
   public static Parse<Seq<T>> NdjsonAt<T>(
     string name,
     Parse<T> lineParser)
-    => FileAt(name).Filter(fp =>
+    => FileAt(name).Bind(fp => ParseMultipart.NdjsonAt(fp, lineParser)).As();
+
+  // EAGER NDJSON: read all lines, build a JSON array, and traverse with lineParser.Seq()
+  public static Parse<Seq<T>> NdjsonAt<T>(
+    FilePart fp,
+    Parse<T> lineParser)
+    => Parse.Pure(fp).As().Filter(fp =>
     {
       try
       {
@@ -230,7 +266,7 @@ public static partial class ParseMultipart
       }
       catch (Exception ex)
       {
-        return Fail<Seq<ParsePathErr>, Seq<T>>([ new ParsePathErr($"Invalid NDJSON: {ex.Message}", typeof(T).Name, Some((object)name), []) ]);
+        return Fail<Seq<ParsePathErr>, Seq<T>>([ new ParsePathErr($"Invalid NDJSON: {ex.Message}", typeof(T).Name, Some((object)fp.FileName), []) ]);
       }
     });
 

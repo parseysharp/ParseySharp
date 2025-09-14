@@ -8,14 +8,14 @@ var builder = WebApplication.CreateBuilder(args);
 // Register ParseySharp ASP.NET core with JSON handler
 builder.Services
   .AddEndpointsApiExplorer()
-  .AddSwaggerGen()
+  .AddSwaggerGen(c =>
+  {
+    c.OperationFilter<RequestModelOperationFilter>();
+  })
   .AddParseySharpCore()
   .AddParseySharpMessagePack()
   .AddParseySharpProtobuf()
-  .AddParseySharpMultipart()
-  .AddSwaggerGen(c =>
-    c.OperationFilter<RequestModelOperationFilter>()
-  );
+  .AddParseySharpMultipart();
 
 // MVC controllers for /mvc routes (mirrors the Minimal API endpoints)
 builder.Services
@@ -122,6 +122,35 @@ app.MapParsedPost("/import-csv-stream",
   return Results.Ok(new { input.name, good, bad });
 }).AcceptsMultipart();
 
+// --- FileWithFormat demo (eager) ---
+// Build a dependent parser that reads inputFormat and then parses inputFile accordingly
+var fileWithFormatSpec = FileWithFormat.BuildStreamingWhen<CsvRow>(
+  prefix: "input",
+  formats: Seq(
+    AcceptFileFormat.CsvStreamingWhen<CsvRow>(hasHeader: true),
+    AcceptFileFormat.NdjsonStreamingWhen<CsvRow>(),
+    AcceptFileFormatYaml.YamlStreamingWhen<CsvRow>(),
+    AcceptFileFormatAvro.AvroStreamingWhen<CsvRow>()
+  ),
+  shape: csvLineParser,
+  when: fp => fp.Length > 70)
+.RegisterDocFormats(typeof(FwFmts));
+
+app.MapParsedPost("/import-file-with-format",
+  fileWithFormatSpec.Parser,
+  (Either<Seq<CsvRow>, IAsyncEnumerable<Validation<Seq<ParsePathErr>, CsvRow>>> rows) => rows.Match(
+    Left: async rows => await Task.FromResult<IResult>(Results.Ok(new { rows })),
+    Right: async rows =>
+    {
+      var (bad, good) = await rows.AsSourceT<IO, Validation<Seq<ParsePathErr>, CsvRow>>()
+        .Collect()
+        .Map(v => v.Map(v => v.ToEither()).Partition())
+        .RunAsync();
+      return Results.Ok(new { good, bad });
+    }))
+  .AcceptsMultipart()
+  .SetRequestModel<FwFmtUpload>();
+
 // --- Avro OCF (eager) ---
 app.MapParsedPost("/import-avro",
   withFileParser(ParseMultipartAvro.AvroAt("file", csvLineParser.Seq())),
@@ -177,3 +206,8 @@ public sealed record Item(string kind, string? left, int? right);
 public sealed record CsvRow(string id, string name, Option<int> age);
 public sealed record EventRow(string id, Option<int> count);
 public sealed record WithFile<T>(T value, string name);
+public sealed record FwFmts();
+public sealed record FwFmtUpload(
+  FormatName<FwFmts> inputFormat,
+  FileUpload<AnyFormat, CsvRow> inputFile
+);

@@ -17,7 +17,6 @@ public static class AcceptsExtensions
     return builder;
   }
 
-
   // Helper to add Accepts metadata from a registered content handler. It reads the
   // request model type from RequestModelMetadata if present, otherwise defaults to object.
   public static RouteHandlerBuilder AcceptsWith<THandler>(this RouteHandlerBuilder builder)
