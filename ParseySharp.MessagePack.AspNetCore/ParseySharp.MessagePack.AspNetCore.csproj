@@ -4,6 +4,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageId>ParseySharp.MessagePack.AspNetCore</PackageId>
+    <Version>0.1.0-beta.1</Version>
+    <Description>ASP.NET Core integration for MessagePack with ParseySharp: accept MessagePack payloads using the same parsers.</Description>
+    <PackageTags>$(PackageTags);messagepack;aspnetcore</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

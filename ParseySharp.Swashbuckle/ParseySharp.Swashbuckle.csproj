@@ -3,6 +3,11 @@
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageId>ParseySharp.Swashbuckle</PackageId>
+    <Version>0.1.0-beta.1</Version>
+    <Description>Swashbuckle helpers for ParseySharp: accurate request models for multi-format endpoints.</Description>
+    <PackageTags>$(PackageTags);swashbuckle;openapi;swagger</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

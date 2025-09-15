@@ -5,10 +5,10 @@
     <Nullable>enable</Nullable>
     <PackageId>ParseySharp.Refine</PackageId>
     <Version>0.1.0</Version>
-    <Authors>Your Name</Authors>
-    <Description>ParseySharp.Refine: lightweight refinement primitives</Description>
-    <PackageTags>validation;refinement;language-ext;csharp</PackageTags>
+    <Description>ParseySharp.Refine: lightweight refinement primitives for validated domains.</Description>
+    <PackageTags>$(PackageTags);refinement;validation</PackageTags>
     <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 

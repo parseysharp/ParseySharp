@@ -4,6 +4,11 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <PackageId>ParseySharp.Protobuf</PackageId>
+    <Version>0.1.0</Version>
+    <Description>Protobuf navigator for ParseySharp: run parsers over Google.Protobuf messages and WellKnownTypes.</Description>
+    <PackageTags>$(PackageTags);protobuf</PackageTags>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
   </PropertyGroup>
 
   <ItemGroup>

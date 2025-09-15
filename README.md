@@ -171,7 +171,7 @@ Swagger helpers: add `ParseySharp.Swashbuckle` and `RequestModel` annotations (M
 
 ## License
 
-MIT. See `LICENSE`.
+Apache-2.0. See `LICENSE`.
 
 ## Extending to new formats (4 functions)
 

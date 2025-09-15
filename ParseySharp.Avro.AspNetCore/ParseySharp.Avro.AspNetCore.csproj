@@ -3,6 +3,11 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageId>ParseySharp.Avro.AspNetCore</PackageId>
+    <Version>0.1.0-beta.1</Version>
+    <Description>ASP.NET Core integration for Avro with ParseySharp: accept Avro payloads using the same parsers.</Description>
+    <PackageTags>$(PackageTags);avro;aspnetcore</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

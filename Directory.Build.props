@@ -10,4 +10,33 @@
     <WarningsAsErrors>CS8600;CS8602;CS8603;CS8604;CS8618;CS8625</WarningsAsErrors>
   </PropertyGroup>
 
+  <!-- Shared NuGet package metadata -->
+  <PropertyGroup>
+    <!-- Publisher/org identity -->
+    <Authors>ParseySharp</Authors>
+
+    <!-- Repo and project links -->
+    <RepositoryUrl>https://github.com/parseysharp/ParseySharp</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <PackageProjectUrl>https://github.com/parseysharp/ParseySharp</PackageProjectUrl>
+
+    <!-- License (Apache 2.0 across the suite) -->
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+
+    <!-- Docs: keep XML docs off for now per user preference -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+
+    <!-- Baseline discoverability tags; projects can extend -->
+    <PackageTags>$(PackageTags);parsing;validation;json;xml;yaml;protobuf;messagepack;avro;csharp;aspnetcore</PackageTags>
+
+    <!-- Symbols: generate snupkg for NuGet (no extra setup required) -->
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <!-- Pack README.md if present in a project -->
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" Condition="Exists('README.md')" />
+  </ItemGroup>
 </Project>
