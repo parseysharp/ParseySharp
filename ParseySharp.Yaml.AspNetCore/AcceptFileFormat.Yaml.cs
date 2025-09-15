@@ -2,8 +2,14 @@ namespace ParseySharp.AspNetCore;
 
 public static class AcceptFileFormatYaml
 {
-  // YAML -> Seq<T> (expects top-level sequence)
-  public static FormatDef<Unit, T, LanguageExt.Seq<T>> Yaml<T>()
+  public static FormatDef<Unit, T, T> Yaml<T>()
+    => FormatDef.New<T, T>(
+      Name: "yaml",
+      ContentType: "application/x-yaml",
+      Build: (fileField, shape) => ParseMultipartYaml.YamlAt(fileField, shape)
+    );
+
+  public static FormatDef<Unit, T, LanguageExt.Seq<T>> YamlRows<T>()
     => FormatDef.New<T, Seq<T>>(
       Name: "yaml",
       ContentType: "application/x-yaml",

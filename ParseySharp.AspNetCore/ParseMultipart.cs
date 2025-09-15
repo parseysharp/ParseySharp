@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Runtime.CompilerServices;
+using System.Xml.Linq;
 
 namespace ParseySharp.AspNetCore;
 
@@ -47,9 +48,33 @@ public static partial class ParseMultipart
       }
     });
 
-  // Parse JSON file contents using the core JSON navigator with a supplied parser
-  public static Parse<T> JsonAt<T>(string name, Parse<T> parser)
-    => FileAt(name).Filter(fp =>
+    public static Parse<T> XmlAt<T>(string name, Parse<T> parser) =>
+      FileAt(name).Bind(fp => XmlAt(fp, parser)).As();
+
+    public static Parse<T> XmlAt<T>(FilePart fp, Parse<T> parser) =>
+      Parse.Pure(fp).As().Filter(fp =>
+    {
+      try
+      {
+        using var s = fp.OpenRead();
+        var doc = XDocument.Load(s);
+        var elem = doc.Root;
+        if (elem is null)
+          return Fail<Seq<ParsePathErr>, T>([ new ParsePathErr("Empty XML", typeof(T).Name, Some((object)fp.FileName), []) ]);
+        return parser.ParseXml()(elem);
+      }
+      catch (Exception ex)
+      {
+        return Fail<Seq<ParsePathErr>, T>([ new ParsePathErr($"Invalid XML: {ex.Message}", typeof(T).Name, Some((object)fp.FileName), []) ]);
+      }
+    });
+
+    // Parse JSON file contents using the core JSON navigator with a supplied parser
+    public static Parse<T> JsonAt<T>(string name, Parse<T> parser)
+    => FileAt(name).Bind(fp => JsonAt(fp, parser)).As();
+
+    public static Parse<T> JsonAt<T>(FilePart fp, Parse<T> parser)
+    => Parse.Pure(fp).As().Filter(fp =>
     {
       try
       {

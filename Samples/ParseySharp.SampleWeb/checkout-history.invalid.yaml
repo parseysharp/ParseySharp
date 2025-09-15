@@ -1,0 +1,32 @@
+- customerEmail: not-an-email
+  paymentMethod:
+    type: card
+    number: "4111111111111112"
+    cvv: 12
+  items:
+    - sku: ""
+      quantity: 0
+      unitPrice: 0.0
+  shippingAddress:
+    line1: ""
+    city: Springfield
+    country: US
+    postal: ""
+- customerEmail: eve@example.com
+  paymentMethod:
+    type: ach
+    routingNumber: "021000022"
+    accountNumber: ""
+  items:
+    - sku: E-500
+      quantity: 1
+      unitPrice: 26000.0
+- customerEmail: frank@example.com
+  paymentMethod:
+    type: card
+    number: "378282246310005"
+    cvv: 123
+  items:
+    - sku: F-600
+      quantity: 1
+      unitPrice: 150.0

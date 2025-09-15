@@ -18,5 +18,6 @@
     <ProjectReference Include="..\..\ParseySharp.Avro.AspNetCore\ParseySharp.Avro.AspNetCore.csproj" />
     <ProjectReference Include="..\..\ParseySharp.Json\ParseySharp.Json.csproj" Condition="Exists('..\..\ParseySharp.Json\ParseySharp.Json.csproj')" />
     <ProjectReference Include="..\..\ParseySharp.Swashbuckle\ParseySharp.Swashbuckle.csproj" />
+    <ProjectReference Include="..\..\ParseySharp.Refine\ParseySharp.Refine.csproj" />
   </ItemGroup>
 </Project>

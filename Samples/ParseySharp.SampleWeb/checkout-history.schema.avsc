@@ -1,0 +1,43 @@
+{
+  "type": "record",
+  "name": "CheckoutRequest",
+  "namespace": "ParseySharp.SampleWeb",
+  "fields": [
+    { "name": "customerEmail", "type": "string" },
+    { "name": "paymentMethod", "type": {
+        "type": "record",
+        "name": "PaymentMethod",
+        "fields": [
+          { "name": "type", "type": { "type": "enum", "name": "PaymentMethodTypeAvro", "symbols": ["card", "ach"] } },
+          { "name": "number", "type": ["null", "string"], "default": null },
+          { "name": "cvv", "type": ["null", "int"], "default": null },
+          { "name": "routingNumber", "type": ["null", "string"], "default": null },
+          { "name": "accountNumber", "type": ["null", "string"], "default": null }
+        ]
+      }
+    },
+    { "name": "items", "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "Item",
+          "fields": [
+            { "name": "sku", "type": "string" },
+            { "name": "quantity", "type": "int" },
+            { "name": "unitPrice", "type": "double" }
+          ]
+        }
+      }
+    },
+    { "name": "shippingAddress", "type": ["null", {
+        "type": "record",
+        "name": "PostalAddress",
+        "fields": [
+          { "name": "line1", "type": "string" },
+          { "name": "city", "type": "string" },
+          { "name": "country", "type": "string" },
+          { "name": "postal", "type": "string" }
+        ]
+      }], "default": null }
+  ]
+}

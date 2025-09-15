@@ -91,7 +91,21 @@ public partial class Parse
       }
     }).As();
 
-  // Int64Flex: accepts number OR numeric string
+  public static Parse<int> Int32Flex(NumberStyles styles = NumberStyles.Integer, CultureInfo? culture = null)
+    => As<object>().Filter(obj =>
+    {
+      switch (obj)
+      {
+        case int i: return Right<string, int>(i);
+        case string s:
+          return int.TryParse(s, styles, culture ?? CultureInfo.InvariantCulture, out var v)
+            ? Right<string, int>(v)
+            : Left<string, int>($"Invalid integer: {s}");
+        default:
+          return Left<string, int>($"Invalid integer type: {obj?.GetType().Name ?? "null"}");
+      }
+    }).As();
+
   public static Parse<long> Int64Flex(NumberStyles styles = NumberStyles.Integer, CultureInfo? culture = null)
     => As<object>().Filter(obj =>
     {

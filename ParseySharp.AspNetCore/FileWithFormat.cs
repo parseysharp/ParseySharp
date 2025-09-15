@@ -33,6 +33,12 @@ public sealed record FormatInfo(string Name, string ContentType);
 
 public static class FileWithFormat
 {
+  public static FileWithFormatSpec<TResult> Build<TResult>(
+    string prefix,
+    Seq<FormatDef<Unit, TResult, TResult>> formats,
+    Parse<TResult> shape) =>
+    Build<Unit, TResult, TResult>(prefix, formats, shape, unit);
+
   public static FileWithFormatSpec<TResult> Build<TResult, TShape>(
     string prefix,
     Seq<FormatDef<Unit, TShape, TResult>> formats,

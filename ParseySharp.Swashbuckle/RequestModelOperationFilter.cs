@@ -190,7 +190,7 @@ public sealed class RequestModelOperationFilter : IOperationFilter
             else
             {
               var shape = RenderTypeShape(p.ModelType, context);
-              sb.AppendLine($"- {p.Name}{arr} ({ct}), rows shape: {shape}");
+              sb.AppendLine($"- {p.Name}{arr} ({ct}), payload shape: {shape}");
             }
           }
           operation.Description = string.IsNullOrWhiteSpace(operation.Description)

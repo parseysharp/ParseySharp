@@ -59,6 +59,23 @@ public sealed class AcceptsSemanticConvention : IActionModelConvention
       action.Filters.Add(new ConsumesAttribute(types[0]));
     else
       action.Filters.Add(new ConsumesAttribute(types[0], types.Skip(1).ToArray()));
+
+    // Ensure any static FileWithFormatSpec<> fields on the controller are initialized
+    // so fluent .RegisterDocFormats(...) calls run before Swagger builds docs.
+    try
+    {
+      var ct = action.Controller.ControllerType;
+      var flags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static;
+      foreach (var f in ct.GetFields(flags))
+      {
+        var t = f.FieldType;
+        if (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(FileWithFormatSpec<>))
+        {
+          _ = f.GetValue(null);
+        }
+      }
+    }
+    catch { /* best-effort: avoid impacting pipeline on reflection issues */ }
   }
 }
 

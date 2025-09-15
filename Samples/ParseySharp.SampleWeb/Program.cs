@@ -1,7 +1,6 @@
-using ParseySharp;
 using ParseySharp.AspNetCore;
-using ParseySharp.Swashbuckle;
-using Google.Protobuf.WellKnownTypes;
+using ParseySharp.SampleWeb;
+using ParseySharp.Refine;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,27 +23,6 @@ builder.Services
 
 builder.Host.UseDefaultServiceProvider(o => { o.ValidateOnBuild = true; o.ValidateScopes = true; });
 
-// Define an explicit parser for Item (JSON body with fields kind/left/right)
-var itemParser =
-  (Parse.As<string>().At("kind", []),
-   Parse.As<string>().Option().At("left", []),
-   Parse.As<int>()
-    .OrElse(
-      Parse.As<string>().Filter(
-        s => int.TryParse(s, out var i)
-          ? Right<string, int>(i)
-          : Left<string, int>("Invalid integer")
-      )
-    )
-    .Option()
-    .Filter(x => x.Filter(_ => _ < 21).Map(_ => "Below 21!"))
-    .At("right", []))
-  .Apply((kind, leftOpt, rightOpt) => new Item(
-    kind,
-    leftOpt.Match(None: (string?)null, Some: x => x),
-    rightOpt.Match(None: (int?)null, Some: x => x)
-  )).As();
-
 var app = builder.Build();
 
 // Swagger UI for trying the endpoints and inspecting RequestType
@@ -54,160 +32,37 @@ app.UseSwaggerUI();
 // Map MVC controllers
 app.MapControllers();
 
-app.MapParsedPost("/items", itemParser, (Item item) => Task.FromResult<IResult>(Results.Ok(new { received = item })))
-   .SetRequestModel<Item>()
-   .AcceptsJson()
-   .AcceptsXml()
-   .AcceptsFormUrlEncoded()
-   .AcceptsMessagePack()
-   .AcceptsProtobuf();
+app.MapParsedPost("/checkout",
+  Checkout.CheckoutParser, (ValidCheckout checkout) => 
+Task.FromResult<IResult>(
+  Results.Ok(new { 
+    accepted = true,
+    paymentMethod = checkout.Value().PaymentMethod.Value().Match<object>(
+      Card: card => new { type = "card", last4 = card.Number[^4..] },
+      Ach: ach => new { type = "ach", routingLast4 = ach.RoutingNumber[^4..], accountLast4 = ach.AccountNumber[^4..] }),
+    itemsCount = checkout.Value().Items.Sum(x => x.Value().Quantity),
+    amount = checkout.Value().Total
+  })))
+.AcceptsJson()
+.AcceptsXml()
+.AcceptsMessagePack()
+.AcceptsProtobuf()
+.SetRequestModel<CheckoutDoc>();
 
-app.MapParsedGet("/items", itemParser, (Item item) => Task.FromResult<IResult>(Results.Ok(new { received = item })))
-   .SetRequestModel<Item>()
-   .AcceptsQueryString();
-
-var tsParser =
-  (Parse.As<long>().At("seconds", []),
-   Parse.As<int>().At("nanos", []))
-  .Apply((s, n) => ( BigGuys: s, LittleGuys: n ))
-  .As();
-
-app.MapParsedPost("/ts", tsParser, 
-  ((long BigGuys, int LittleGuys) x) => Task.FromResult<IResult>(
-    Results.Ok(new { x.BigGuys, x.LittleGuys })))
-   .AcceptsProtobuf(Timestamp.Parser);
-
-// NOTE on GET: typical GET requests do not carry bodies. Only use MapParsedGet
-// if you purposefully send a body (e.g., application/json). Otherwise, prefer
-// separate query/route parsers (not shown here), since the binder reads the body.
-
-app.MapGet("/health", () => Results.Ok(new { ok = true }));
-
-// --- CSV (eager) ---
-var csvLineParser =
-  (Parse.As<string>().At("id", []),
-   Parse.As<string>().At("name", []),
-   Parse.As<int>().Option()
-   .OrElse(
-     Parse.As<string>().Filter(
-       s => string.IsNullOrEmpty(s)
-         ? Right<string, Option<int>>(None)
-         : int.TryParse(s, out var i)
-           ? Right<string, Option<int>>(Some(i))
-           : Left<string, Option<int>>("Invalid integer")
-     )
-   )
-   .At("age", []))
-  .Apply((id, name, ageOpt) => new CsvRow(id, name, ageOpt)).As();
-
-static Parse<WithFile<T>> withFileParser<T>(Parse<T> parser) =>
-  (parser,
-   Parse.As<string>().At("name", [])).Apply((rows, name) => new WithFile<T>(rows, name)).As();
-
-app.MapParsedPost("/import-csv",
-  withFileParser(ParseMultipart.CsvAt("file", hasHeader: true, csvLineParser)),
-  (WithFile<Seq<CsvRow>> input)
-  => Task.FromResult<IResult>(Results.Ok(new { input.name, results = input.value })))
-  .AcceptsMultipart();
-
-// --- CSV (streaming) ---
-app.MapParsedPost("/import-csv-stream",
-  withFileParser(ParseMultipart.CsvStream<CsvRow>("file", hasHeader: true, csvLineParser.As())),
-  async (WithFile<IAsyncEnumerable<Validation<Seq<ParsePathErr>, CsvRow>>> input) =>
-{
-  var (bad, good) = await input.value.AsSourceT<IO, Validation<Seq<ParsePathErr>, CsvRow>>()
-    .Collect()
-    .Map(v => v.Map(v => v.ToEither()).Partition())
-    .RunAsync();
-  return Results.Ok(new { input.name, good, bad });
-}).AcceptsMultipart();
-
-// --- FileWithFormat demo (eager) ---
-// Build a dependent parser that reads inputFormat and then parses inputFile accordingly
-var fileWithFormatSpec = FileWithFormat.BuildStreamingWhen<CsvRow>(
-  prefix: "input",
-  formats: Seq(
-    AcceptFileFormat.CsvStreamingWhen<CsvRow>(hasHeader: true),
-    AcceptFileFormat.NdjsonStreamingWhen<CsvRow>(),
-    AcceptFileFormatYaml.YamlStreamingWhen<CsvRow>(),
-    AcceptFileFormatAvro.AvroStreamingWhen<CsvRow>()
-  ),
-  shape: csvLineParser,
-  when: fp => fp.Length > 70)
-.RegisterDocFormats(typeof(FwFmts));
-
-app.MapParsedPost("/import-file-with-format",
-  fileWithFormatSpec.Parser,
-  (Either<Seq<CsvRow>, IAsyncEnumerable<Validation<Seq<ParsePathErr>, CsvRow>>> rows) => rows.Match(
-    Left: async rows => await Task.FromResult<IResult>(Results.Ok(new { rows })),
-    Right: async rows =>
-    {
-      var (bad, good) = await rows.AsSourceT<IO, Validation<Seq<ParsePathErr>, CsvRow>>()
-        .Collect()
-        .Map(v => v.Map(v => v.ToEither()).Partition())
-        .RunAsync();
-      return Results.Ok(new { good, bad });
-    }))
-  .AcceptsMultipart()
-  .SetRequestModel<FwFmtUpload>();
-
-// --- Avro OCF (eager) ---
-app.MapParsedPost("/import-avro",
-  withFileParser(ParseMultipartAvro.AvroAt("file", csvLineParser.Seq())),
-  (WithFile<Seq<CsvRow>> input)
-  => Task.FromResult<IResult>(Results.Ok(new { input.name, results = input.value })))
-  .AcceptsMultipart();
-
-// --- Avro OCF (streaming) ---
-app.MapParsedPost("/import-avro-stream",
-  withFileParser(ParseMultipartAvro.AvroStream("file", csvLineParser)),
-  async (WithFile<IAsyncEnumerable<Validation<Seq<ParsePathErr>, CsvRow>>> input) =>
-{
-  var (bad, good) = await input.value.AsSource()
-    .Collect()
-    .Map(v => v.Map(v => v.ToEither()).Partition())
-    .RunAsync();
-  return Results.Ok(new { input.name, good, bad });
-}).AcceptsMultipart();
-
-app.MapParsedPost("/import-yaml",
-  withFileParser(ParseMultipartYaml.YamlAt("file", csvLineParser.Seq())),
-  (WithFile<Seq<CsvRow>> input)
-  => Task.FromResult<IResult>(Results.Ok(new { input.name, results = input.value })))
-  .AcceptsMultipart();
-
-var ndjsonLineParser =
-  (Parse.As<string>().At("id", []),
-   Parse.As<int>().Option().At("count", []))
-  .Apply((id, count) => new EventRow(id, count));
-
-app.MapParsedPost("/import-ndjson",
-  withFileParser(ParseMultipart.NdjsonAt("file", ndjsonLineParser.As())),
-  (WithFile<Seq<EventRow>> input)
-  => Task.FromResult<IResult>(Results.Ok(new { input.name, result = input.value })))
-  .AcceptsMultipart();
-
-// --- NDJSON (streaming) ---
-app.MapParsedPost("/import-ndjson-stream",
-  withFileParser(ParseMultipart.NdjsonStream("file", ndjsonLineParser.As())),
-  async (WithFile<IAsyncEnumerable<Validation<Seq<ParsePathErr>, EventRow>>> input) =>
-{
-  var (bad, good) = await input.value.AsSource()
-    .Collect()
-    .Map(v => v.Map(v => v.ToEither()).Partition())
-    .RunAsync();
-  return Results.Ok(new { input.name, good, bad });
-}).AcceptsMultipart();
+app.MapParsedPost("/checkout-history",
+  Checkout.CheckoutHistoryParser.Parser, (Seq<ValidCheckout> checkouts) =>
+Task.FromResult<IResult>(
+  Results.Ok(new
+  {
+    accepted = true,
+    total = checkouts.Length,
+    byMethod = checkouts.GroupBy(x => x.Value().PaymentMethod.Value().Match<object>(
+      Card: _ => "card",
+      Ach: _ => "ach"
+    )).ToDictionary(g => g.Key, g => g.Count()),
+    sumAmount = checkouts.Sum(x => x.Value().Total),
+  })))
+.AcceptsMultipart()
+.SetRequestModel<CheckoutHistoryDoc>();
 
 app.Run();
-
-// A simple DTO we'll bind to (must be declared before top-level statements)
-public sealed record Item(string kind, string? left, int? right);
-public sealed record CsvRow(string id, string name, Option<int> age);
-public sealed record EventRow(string id, Option<int> count);
-public sealed record WithFile<T>(T value, string name);
-public sealed record FwFmts();
-public sealed record FwFmtUpload(
-  FormatName<FwFmts> inputFormat,
-  FileUpload<AnyFormat, CsvRow> inputFile
-);

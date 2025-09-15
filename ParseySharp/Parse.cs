@@ -107,15 +107,25 @@ public static class ParseExtensions
   public static Parse<B> Filter<A, B>(this Parse<A> parser, Func<A, Validation<Seq<ParsePathErr>, B>> f) =>
     new FilterParse<A, B>(parser, f);
 
-  public static Parse<A> Filter<A>(this Parse<A> parser, Func<A, Option<string>> f) =>
+  public static Parse<A> Filter<A>(this Parse<A> parser, Func<A, Seq<string>> f) =>
     Filter(parser, x => f(x).Match(
-      None: () => Success<Seq<ParsePathErr>, A>(x),
-      Some: e => Fail<Seq<ParsePathErr>, A>([new ParsePathErr(e, typeof(A).Name, Optional(x), [])])));
+      Empty: () => Success<Seq<ParsePathErr>, A>(x),
+      Tail: (h, t) => Fail<Seq<ParsePathErr>, A>(
+        ([h] + t).Map(e => new ParsePathErr(e, typeof(A).Name, Optional(x), [])))
+      )
+    );
 
-  public static Parse<B> Filter<A, B>(this Parse<A> parser, Func<A, Either<string, B>> f) =>
+  public static Parse<A> Filter<A>(this Parse<A> parser, Func<A, Option<string>> f) =>
+    Filter(parser, x => f(x).ToSeq());
+
+  public static Parse<B> Filter<A, B>(this Parse<A> parser, Func<A, Either<Seq<string>, B>> f) =>
     Filter(parser, x => f(x).Match(
       Right: b => Success<Seq<ParsePathErr>, B>(b),
-      Left: e => Fail<Seq<ParsePathErr>, B>([new ParsePathErr(e, typeof(A).Name, Optional(x), [])])));
+      Left: es => Fail<Seq<ParsePathErr>, B>(es.Map(e => new ParsePathErr(e, typeof(A).Name, Optional(x), [])))
+    ));
+
+  public static Parse<B> Filter<A, B>(this Parse<A> parser, Func<A, Either<string, B>> f) =>
+    Filter(parser, x => f(x).MapLeft<Seq<string>>(x => [x]));
 
   public static Parse<A> OrElse<A>(this Parse<A> parser, Parse<A> other) =>
     new OrElseParse<A>(parser, other);

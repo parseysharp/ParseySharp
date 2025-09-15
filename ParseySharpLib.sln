@@ -23,6 +23,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Samples", "Samples", "{5D20
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ParseySharp.SampleWeb", "Samples\ParseySharp.SampleWeb\ParseySharp.SampleWeb.csproj", "{BEE4345F-6111-432C-83FA-B231925FF073}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ParseySharp.Refine", "ParseySharp.Refine\ParseySharp.Refine.csproj", "{0A903399-FA38-48D7-AB13-0A7215939602}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -141,6 +143,18 @@ Global
 		{BEE4345F-6111-432C-83FA-B231925FF073}.Release|x64.Build.0 = Release|Any CPU
 		{BEE4345F-6111-432C-83FA-B231925FF073}.Release|x86.ActiveCfg = Release|Any CPU
 		{BEE4345F-6111-432C-83FA-B231925FF073}.Release|x86.Build.0 = Release|Any CPU
+		{0A903399-FA38-48D7-AB13-0A7215939602}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0A903399-FA38-48D7-AB13-0A7215939602}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0A903399-FA38-48D7-AB13-0A7215939602}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{0A903399-FA38-48D7-AB13-0A7215939602}.Debug|x64.Build.0 = Debug|Any CPU
+		{0A903399-FA38-48D7-AB13-0A7215939602}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{0A903399-FA38-48D7-AB13-0A7215939602}.Debug|x86.Build.0 = Debug|Any CPU
+		{0A903399-FA38-48D7-AB13-0A7215939602}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0A903399-FA38-48D7-AB13-0A7215939602}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0A903399-FA38-48D7-AB13-0A7215939602}.Release|x64.ActiveCfg = Release|Any CPU
+		{0A903399-FA38-48D7-AB13-0A7215939602}.Release|x64.Build.0 = Release|Any CPU
+		{0A903399-FA38-48D7-AB13-0A7215939602}.Release|x86.ActiveCfg = Release|Any CPU
+		{0A903399-FA38-48D7-AB13-0A7215939602}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

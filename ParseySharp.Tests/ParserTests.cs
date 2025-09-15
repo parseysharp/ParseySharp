@@ -69,7 +69,7 @@ public class ParserTests
       var singleParser = EitherParser(
         left: Parse.As<string>()
           .Filter(s => Some("Too short!").Filter(_ => s.Length < 5)),
-        right: Parse.As<int>().Option()
+        right: Parse.Int32Flex().Option()
           .Filter(x => x.Filter(i => i < 21).Map(_ => "Too low!"))
       );
       var parser = singleParser.Seq();

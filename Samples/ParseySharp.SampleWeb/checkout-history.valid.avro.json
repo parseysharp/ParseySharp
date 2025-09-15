@@ -1,0 +1,20 @@
+[
+  {
+    "customerEmail": "alice@example.com",
+    "paymentMethod": { "type": "card", "number": "4111111111111111", "cvv": 123 },
+    "items": [ { "sku": "A-100", "quantity": 2, "unitPrice": 10.0 } ],
+    "shippingAddress": { "line1": "1 Main St", "city": "Springfield", "country": "US", "postal": "90210" }
+  },
+  {
+    "customerEmail": "bob@example.com",
+    "paymentMethod": { "type": "ach", "routingNumber": "021000021", "accountNumber": "123456789" },
+    "items": [ { "sku": "B-200", "quantity": 1, "unitPrice": 5.0 } ],
+    "shippingAddress": null
+  },
+  {
+    "customerEmail": "carol@example.com",
+    "paymentMethod": { "type": "card", "number": "4111111111111111", "cvv": 123 },
+    "items": [ { "sku": "C-300", "quantity": 4, "unitPrice": 30.0 } ],
+    "shippingAddress": { "line1": "200 Broad St", "city": "Springfield", "country": "US", "postal": "10001" }
+  }
+]

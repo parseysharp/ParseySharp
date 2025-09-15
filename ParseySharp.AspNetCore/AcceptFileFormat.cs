@@ -2,6 +2,28 @@ namespace ParseySharp.AspNetCore;
 
 public static class AcceptFileFormat
 {
+  
+  public static FormatDef<Unit, T, LanguageExt.Seq<T>> XmlRows<T>()
+    => FormatDef.New<T, Seq<T>>(
+      Name: "xml",
+      ContentType: "application/xml",
+      Build: (file, shape) => ParseMultipart.XmlAt(file, shape.Seq())
+    );
+
+  public static FormatDef<Unit, T, T> Xml<T>()
+    => FormatDef.New<T, T>(
+      Name: "xml",
+      ContentType: "application/xml",
+      Build: (file, shape) => ParseMultipart.XmlAt(file, shape)
+    );
+
+  public static FormatDef<Unit, T, T> Json<T>()
+    => FormatDef.New<T, T>(
+      Name: "json",
+      ContentType: "application/json",
+      Build: (file, shape) => ParseMultipart.JsonAt(file, shape)
+    );
+
   // CSV rows -> Seq<T>
   public static FormatDef<Unit, T, LanguageExt.Seq<T>> Csv<T>(bool hasHeader = true)
     => FormatDef.New<T, Seq<T>>(

@@ -235,6 +235,7 @@ public static class ParsePathNav
         JsonValueKind.Null => Right<Unknown<JsonElement>, Unknown<object>>(Unknown.UnsafeFromOption<object>(None)),
         JsonValueKind.Undefined => Right<Unknown<JsonElement>, Unknown<object>>(Unknown.UnsafeFromOption<object>(None)),
         JsonValueKind.Array => Right<Unknown<JsonElement>, Unknown<object>>(Unknown.New<object>(je.EnumerateArray())),
+        JsonValueKind.Object => Right<Unknown<JsonElement>, Unknown<object>>(Unknown.New<object>(je)),
         _ => Left<Unknown<JsonElement>, Unknown<object>>(Unknown.New(je))
       },
       CloneNode: je =>
@@ -311,14 +312,7 @@ public static class ParsePathNav
             ? Right<Unknown<XElement>, Unknown<object>>(Unknown.New<object>(xe.Elements()))
             : string.IsNullOrWhiteSpace(xe.Value)
               ? Right<Unknown<XElement>, Unknown<object>>(Unknown.UnsafeFromOption<object>(None))
-              : xe.Value switch
-                {
-                  var s when int.TryParse(s, out var iv)    => Right<Unknown<XElement>, Unknown<object>>(Unknown.New<object>(iv)),
-                  var s when long.TryParse(s, out var lv)   => Right<Unknown<XElement>, Unknown<object>>(Unknown.New<object>(lv)),
-                  var s when double.TryParse(s, out var dv) => Right<Unknown<XElement>, Unknown<object>>(Unknown.New<object>(dv)),
-                  var s when bool.TryParse(s, out var bv)   => Right<Unknown<XElement>, Unknown<object>>(Unknown.New<object>(bv)),
-                  var s                                     => Right<Unknown<XElement>, Unknown<object>>(Unknown.New<object>(s))
-                },
+              : Right<Unknown<XElement>, Unknown<object>>(Unknown.New<object>(xe.Value)),
       CloneNode: xe => new XElement(xe)
     );
 
