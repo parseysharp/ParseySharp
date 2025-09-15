@@ -1,9 +1,0 @@
-{
-  "type": "record",
-  "name": "CsvRow",
-  "fields": [
-    {"name": "id", "type": "string"},
-    {"name": "name", "type": "string"},
-    {"name": "age", "type": ["null", "int"], "default": null}
-  ]
-}

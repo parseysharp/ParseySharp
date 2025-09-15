@@ -8,7 +8,7 @@ public static class Refine
 {
   public sealed class Valid
   {
-    internal static readonly Valid Instance = new Valid();
+    internal static readonly Valid Instance = new ();
     private Valid() { }
   }
 
@@ -16,12 +16,12 @@ public static class Refine
       where TBrand : struct, IRefine<T, TBrand>
   {
     Refined<T, TBrand> Inner { get; }
-    static abstract LanguageExt.Seq<string> Errors(T x);
+    static abstract Seq<string> Errors(T x);
   }
 
   public readonly record struct Refined<T, TBrand>(T Value, Valid Proof);
 
-  public static LanguageExt.Either<LanguageExt.Seq<string>, Refined<T, TBrand>>
+  public static Either<Seq<string>, Refined<T, TBrand>>
   Create<T, TBrand>(T x)
       where TBrand : struct, IRefine<T, TBrand>
   {
@@ -32,7 +32,7 @@ public static class Refine
   }
 }
 
-public static class RefineAccess
+public static class RefineExtensions
 {
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static T Value<T, TBrand>(this Refine.IRefine<T, TBrand> x)

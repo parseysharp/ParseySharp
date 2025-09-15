@@ -9,7 +9,7 @@
     <Description>ParseySharp.Refine: lightweight refinement primitives</Description>
     <PackageTags>validation;refinement;language-ext;csharp</PackageTags>
     <RepositoryType>git</RepositoryType>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>

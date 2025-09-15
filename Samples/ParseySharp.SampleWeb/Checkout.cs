@@ -10,6 +10,8 @@ public readonly record struct Email(Refine.Refined<string, Email> Inner): Refine
       "Email must contain @".ErrUnless(() => x.Contains("@")) +
       "Email must be non-empty".ErrUnless(() => x.Trim().Length > 0) +
       "Email must contain a domain".ErrUnless(() => x.Contains("@") && x.Split("@").Last().Length > 0);
+
+    public static Either<Seq<string>, Email> Refined(string x) => Refine.Create<string, Email>(x).Map<Email>(x => new(x));
 }
 
 public abstract record PaymentMethod
@@ -50,6 +52,9 @@ public readonly record struct ValidPayment(Refine.Refined<PaymentMethod, ValidPa
     int sum = 3*(d1+d4+d7) + 7*(d2+d5+d8) + (d3+d6+d9);
     return sum % 10 == 0;
   }
+
+  public static Either<Seq<string>, ValidPayment> Refined(PaymentMethod x) =>
+    Refine.Create<PaymentMethod, ValidPayment>(x).Map<ValidPayment>(x => new(x));
 }
 
 public enum PaymentMethodType { Card, Ach }
@@ -73,6 +78,9 @@ public readonly record struct ValidItem(Refine.Refined<Item, ValidItem> Inner): 
     "SKU is invalid".ErrUnless(() => x.Sku.Length > 0) +
     "Quantity is invalid".ErrUnless(() => x.Quantity > 0) +
     "Unit price is invalid".ErrUnless(() => x.UnitPrice > 0);
+
+  public static Either<Seq<string>, ValidItem> Refined(Item x) =>
+    Refine.Create<Item, ValidItem>(x).Map<ValidItem>(x => new(x));
 }
 
 public sealed record PostalAddress(string Line1, string City, string Country, string Postal);
@@ -95,6 +103,9 @@ public readonly record struct ValidCheckout(Refine.Refined<CheckoutRequest, Vali
         Card: _ => false,
         Ach: _ => x.Total > 25000m
       )).ToSeq();
+
+  public static Either<Seq<string>, ValidCheckout> Refined(CheckoutRequest x) =>
+    Refine.Create<CheckoutRequest, ValidCheckout>(x).Map<ValidCheckout>(x => new(x));
 }
 
 public static class Checkout
@@ -121,8 +132,7 @@ public static class Checkout
       Parse.Int32Flex().At("quantity", []),
       Parse.DecimalFlex().At("unitPrice", [])
     ).Apply((sku, quantity, unitPrice) => new Item(sku, quantity, unitPrice))
-    .As().Filter(x =>
-      Refine.Create<Item, ValidItem>(x).Map(x => new ValidItem(x)));
+    .As().Filter(ValidItem.Refined);
 
   public static readonly Parse<Option<PostalAddress>> PostalAddressParser =
     (
@@ -135,19 +145,19 @@ public static class Checkout
   public static readonly Parse<ValidCheckout> CheckoutParser =
     (
       Parse.As<string>()
-        .Filter(x => Refine.Create<string, Email>(x).Map(x => new Email(x)))
+        .Filter(Email.Refined)
         .At("customerEmail", []),
       PaymentMethodParser.At("paymentMethod", []),
       ItemParser.Seq().At("items", []),
       PostalAddressParser.At("shippingAddress", [])
-    ).Apply((customerEmail, paymentMethod, items, shippingAddress) => 
+    ).Apply((customerEmail, paymentMethod, items, shippingAddress) =>
       new CheckoutRequest(
         customerEmail,
         paymentMethod,
         items.Sum(x => x.Value().Quantity * x.Value().UnitPrice),
         items,
         shippingAddress))
-    .As().Filter(x => Refine.Create<CheckoutRequest, ValidCheckout>(x).Map(x => new ValidCheckout(x)));
+    .As().Filter(ValidCheckout.Refined);
 
   public static readonly FileWithFormatSpec<Seq<ValidCheckout>> CheckoutHistoryParser = FileWithFormat.BuildEager<ValidCheckout>(
     prefix: "history",
