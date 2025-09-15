@@ -15,11 +15,11 @@ public static class EndpointBuilders
   {
     return app.MapPost(pattern, async (HttpContext ctx, IParseBinder binder, IProblemMapper problems) =>
     {
-      var res = await binder.ParseAsync(ctx.Request, parser, ctx.RequestAborted);
+      var res = await binder.ParseAsync(ctx.Request, parser, ctx.RequestAborted).ConfigureAwait(false);
       return await res.Match(
         Fail: errs => Task.FromResult<IResult>(Results.Problem(problems.ToProblem(errs))),
         Succ: val => handler(val)
-      );
+      ).ConfigureAwait(false);
     });
   }
 
@@ -34,11 +34,11 @@ public static class EndpointBuilders
     return app.MapGet(pattern, async (HttpContext ctx, IParseBinder binder, IProblemMapper problems) =>
     {
       // Let the binder select QueryStringContentHandler (registered by default) for GET
-      var res = await binder.ParseAsync(ctx.Request, parser, ctx.RequestAborted);
+      var res = await binder.ParseAsync(ctx.Request, parser, ctx.RequestAborted).ConfigureAwait(false);
       return await res.Match(
         Fail: errs => Task.FromResult<IResult>(Results.Problem(problems.ToProblem(errs))),
         Succ: val => handler(val)
-      );
+      ).ConfigureAwait(false);
     });
   }
 
@@ -52,11 +52,11 @@ public static class EndpointBuilders
   {
     return app.MapPut(pattern, async (HttpContext ctx, IParseBinder binder, IProblemMapper problems) =>
     {
-      var res = await binder.ParseAsync(ctx.Request, parser, ctx.RequestAborted);
+      var res = await binder.ParseAsync(ctx.Request, parser, ctx.RequestAborted).ConfigureAwait(false);
       return await res.Match(
         Fail: errs => Task.FromResult<IResult>(Results.Problem(problems.ToProblem(errs))),
         Succ: val => handler(val)
-      );
+      ).ConfigureAwait(false);
     });
   }
 
@@ -70,11 +70,11 @@ public static class EndpointBuilders
   {
     return app.MapDelete(pattern, async (HttpContext ctx, IParseBinder binder, IProblemMapper problems) =>
     {
-      var res = await binder.ParseAsync(ctx.Request, parser, ctx.RequestAborted);
+      var res = await binder.ParseAsync(ctx.Request, parser, ctx.RequestAborted).ConfigureAwait(false);
       return await res.Match(
         Fail: errs => Task.FromResult<IResult>(Results.Problem(problems.ToProblem(errs))),
         Succ: val => handler(val)
-      );
+      ).ConfigureAwait(false);
     });
   }
 }

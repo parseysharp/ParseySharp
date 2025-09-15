@@ -11,7 +11,7 @@ internal sealed class MultipartFormDataContentHandler : IContentHandler
   {
     try
     {
-      var form = await request.ReadFormAsync(ct);
+      var form = await request.ReadFormAsync(ct).ConfigureAwait(false);
       var dict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
 
       // Text fields: normalize empty string to null; handle multi-values

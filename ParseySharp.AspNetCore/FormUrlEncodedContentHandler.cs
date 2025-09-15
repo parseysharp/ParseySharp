@@ -14,7 +14,7 @@ internal sealed class FormUrlEncodedContentHandler : IContentHandler
   {
     try
     {
-      var form = await request.ReadFormAsync(ct);
+      var form = await request.ReadFormAsync(ct).ConfigureAwait(false);
       var dict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
       foreach (var kv in form)
       {

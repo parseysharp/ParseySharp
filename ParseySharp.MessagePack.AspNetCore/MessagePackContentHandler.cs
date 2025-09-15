@@ -19,7 +19,7 @@ internal sealed class MessagePackContentHandler : IContentHandler
     {
       // Read entire body to an owned buffer
       using var ms = new MemoryStream();
-      await request.Body.CopyToAsync(ms, ct);
+      await request.Body.CopyToAsync(ms, ct).ConfigureAwait(false);
       var bytes = ms.ToArray();
 
       // Allow empty to be treated as nil/document root missing

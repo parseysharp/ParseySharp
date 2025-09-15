@@ -181,7 +181,7 @@ public static partial class ParseMultipart
     await foreach (var item in OwnEach(
       open: ct => Task.FromResult(rowsAsync(new StreamReader(fp.OpenRead()))),
       clone: (string[] row) => row.ToArray()
-    ).WithCancellation(cancellationToken))
+    ).WithCancellation(cancellationToken).ConfigureAwait(false))
     {
       var idx = item.Index;
       var row = item.Value;
@@ -204,7 +204,7 @@ public static partial class ParseMultipart
     bool inQuotes = false;
     while (true)
     {
-      var line = await reader.ReadLineAsync();
+      var line = await reader.ReadLineAsync().ConfigureAwait(false);
       if (line is null) break;
       for (int i = 0; i < line.Length; i++)
       {
@@ -303,7 +303,7 @@ public static partial class ParseMultipart
     await foreach (var item in OwnEach(
       open: ct => Task.FromResult(ReadLines(new StreamReader(fp.OpenRead()), fp.OpenRead(), ct)),
       clone: (string s) => s
-    ).WithCancellation(cancellationToken))
+    ).WithCancellation(cancellationToken).ConfigureAwait(false))
     {
       var idx = item.Index;
       var json = item.Value; // owned string per element
@@ -331,8 +331,8 @@ public static partial class ParseMultipart
     [EnumeratorCancellation] CancellationToken cancellationToken = default)
   {
     var idx = 0;
-    var source = await open(cancellationToken);
-    await foreach (var borrowed in source.WithCancellation(cancellationToken))
+    var source = await open(cancellationToken).ConfigureAwait(false);
+    await foreach (var borrowed in source.WithCancellation(cancellationToken).ConfigureAwait(false))
     {
       yield return new Indexed<TOwned>(idx++, clone(borrowed));
     }
@@ -346,7 +346,7 @@ public static partial class ParseMultipart
     {
       while (!reader.EndOfStream)
       {
-        var line = await reader.ReadLineAsync();
+        var line = await reader.ReadLineAsync(ct).ConfigureAwait(false);
         if (line is null) yield break;
         if (string.IsNullOrWhiteSpace(line)) continue;
         yield return line;
@@ -382,7 +382,7 @@ public static partial class ParseMultipart
         if (ch == '"') { inQuotes = true; }
         else if (ch == ',') { cur.Add(sb.ToString()); sb.Clear(); }
         else if (ch == '\r') { /* ignore, handle on \n */ }
-        else if (ch == '\n') { cur.Add(sb.ToString()); sb.Clear(); rows.Add(cur.ToArray()); cur.Clear(); }
+        else if (ch == '\n') { cur.Add(sb.ToString()); sb.Clear(); rows.Add([.. cur]); cur.Clear(); }
         else sb.Append(ch);
       }
     }
@@ -390,7 +390,7 @@ public static partial class ParseMultipart
     if (sb.Length > 0 || cur.Count > 0)
     {
       cur.Add(sb.ToString());
-      rows.Add(cur.ToArray());
+      rows.Add([.. cur]);
     }
     return rows;
   }

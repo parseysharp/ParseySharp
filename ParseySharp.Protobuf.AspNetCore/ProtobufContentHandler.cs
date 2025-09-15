@@ -18,7 +18,7 @@ internal sealed class ProtobufContentHandler : IContentHandler
     try
     {
       using var ms = new MemoryStream();
-      await request.Body.CopyToAsync(ms, ct);
+      await request.Body.CopyToAsync(ms, ct).ConfigureAwait(false);
       var bytes = ms.ToArray();
       if (bytes.Length == 0)
         return Right<string, object>(new Struct()); // treat empty as empty object

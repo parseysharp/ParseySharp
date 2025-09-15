@@ -14,8 +14,8 @@ public sealed class RequestModelOperationFilter : IOperationFilter
   public void Apply(OpenApiOperation operation, OperationFilterContext context)
   {
     var normalized = IsMvc(context)
-      ? NormalizeMvc(operation, context)
-      : NormalizeMinimal(operation, context);
+      ? NormalizeMvc(context)
+      : NormalizeMinimal(context);
 
     if (normalized is null) return;
 
@@ -56,13 +56,13 @@ public sealed class RequestModelOperationFilter : IOperationFilter
   private static bool IsMvc(OperationFilterContext ctx)
     => ctx.ApiDescription.ActionDescriptor is ControllerActionDescriptor;
 
-  private static Normalized? NormalizeMinimal(OpenApiOperation op, OperationFilterContext ctx)
+  private static Normalized? NormalizeMinimal(OperationFilterContext ctx)
   {
     var reqType = GetRequestTypeFromMetadata(ctx);
     if (reqType is null) return null;
     var schema = ctx.SchemaGenerator.GenerateSchema(reqType, ctx.SchemaRepository);
     var isGet = string.Equals(ctx.ApiDescription.HttpMethod, "GET", StringComparison.OrdinalIgnoreCase);
-    if (isGet) return new Normalized(Mode.Query, reqType, schema, Array.Empty<string>());
+    if (isGet) return new Normalized(Mode.Query, reqType, schema, []);
 
     // Minimal API: best-effort media discovery
     var medias = ctx.ApiDescription.SupportedRequestFormats
@@ -74,13 +74,13 @@ public sealed class RequestModelOperationFilter : IOperationFilter
     return new Normalized(Mode.Body, reqType, schema, medias);
   }
 
-  private static Normalized? NormalizeMvc(OpenApiOperation op, OperationFilterContext ctx)
+  private static Normalized? NormalizeMvc(OperationFilterContext ctx)
   {
     var reqType = GetRequestTypeFromMetadata(ctx);
     if (reqType is null) return null;
     var schema = ctx.SchemaGenerator.GenerateSchema(reqType, ctx.SchemaRepository);
     var isGet = string.Equals(ctx.ApiDescription.HttpMethod, "GET", StringComparison.OrdinalIgnoreCase);
-    if (isGet) return new Normalized(Mode.Query, reqType, schema, Array.Empty<string>());
+    if (isGet) return new Normalized(Mode.Query, reqType, schema, []);
 
     var medias = ctx.ApiDescription.SupportedRequestFormats
       .Select(f => f.MediaType)
@@ -94,7 +94,7 @@ public sealed class RequestModelOperationFilter : IOperationFilter
         ?.OfType<Microsoft.AspNetCore.Mvc.ConsumesAttribute>()
         ?.SelectMany(ca => ca.ContentTypes)
         ?.Where(mt => !string.IsNullOrWhiteSpace(mt))
-        ?.ToList() ?? new List<string>();
+        ?.ToList() ?? [];
       medias.AddRange(consumes);
     }
 
@@ -115,7 +115,7 @@ public sealed class RequestModelOperationFilter : IOperationFilter
   private static void ApplyQuery(OpenApiOperation operation, OperationFilterContext ctx, Normalized n)
   {
     operation.RequestBody = null;
-    operation.Parameters ??= new List<OpenApiParameter>();
+    operation.Parameters ??= [];
 
     var (props, requiredSet) = ResolveProperties(n.Schema, ctx.SchemaRepository);
     if (props.Count == 0)
@@ -168,7 +168,7 @@ public sealed class RequestModelOperationFilter : IOperationFilter
       if (string.Equals(mt, "multipart/form-data", StringComparison.OrdinalIgnoreCase))
       {
         // Build a multipart-aware schema that renders file chooser(s) and collect doc info
-        var (mpSchema, encodings, fileParts, otherParts) = BuildMultipartSchema(n.RequestType, n.Schema);
+        var (mpSchema, encodings, fileParts, _) = BuildMultipartSchema(n.RequestType, n.Schema);
         content.Schema = mpSchema;
         if (encodings.Count > 0)
           content.Encoding = encodings;
@@ -420,7 +420,8 @@ public sealed class RequestModelOperationFilter : IOperationFilter
         // Vendor extension to hint inner model (if present)
         if (modelType is not null)
         {
-          fileSchema.Extensions = fileSchema.Extensions ?? new Dictionary<string, IOpenApiExtension>();
+          fileSchema.Extensions ??= new Dictionary<string, IOpenApiExtension>();
+          // Human-friendly name
           fileSchema.Extensions["x-fileModel"] = new OpenApiString(modelType.Name);
         }
         parts.Add(new FilePartDoc(name, contentType ?? "application/octet-stream", modelType, false));
@@ -433,8 +434,11 @@ public sealed class RequestModelOperationFilter : IOperationFilter
         var tag = t.GetGenericArguments()[0];
         if (FileWithFormatDocRegistry.TryGetInfos(tag, out var infos))
         {
-          var s = new OpenApiSchema { Type = "string" };
-          s.Enum = infos.Select(fi => (IOpenApiAny)new OpenApiString(fi.Name)).ToList();
+          var s = new OpenApiSchema
+          {
+            Type = "string",
+            Enum = infos.Select(fi => (IOpenApiAny)new OpenApiString(fi.Name)).ToList()
+          };
           schema.Properties[name] = s;
           formatSelectors[name] = infos;
           continue;
@@ -485,7 +489,7 @@ public sealed class RequestModelOperationFilter : IOperationFilter
       if (props.Count == 0)
         return t.Name;
 
-      string Map(OpenApiSchema ps)
+      static string Map(OpenApiSchema ps)
       {
         if (ps.Type == "array" && ps.Items is not null)
         {

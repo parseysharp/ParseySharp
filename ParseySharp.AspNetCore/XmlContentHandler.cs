@@ -19,7 +19,7 @@ internal sealed class XmlContentHandler : IContentHandler
         return Left<string, object>("Empty XML body");
 
       using var reader = new StreamReader(request.Body);
-      var content = await reader.ReadToEndAsync();
+      var content = await reader.ReadToEndAsync().ConfigureAwait(false);
       if (string.IsNullOrWhiteSpace(content))
         return Left<string, object>("Empty XML body");
 

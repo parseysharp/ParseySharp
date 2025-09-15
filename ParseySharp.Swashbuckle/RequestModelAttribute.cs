@@ -1,10 +1,9 @@
 namespace ParseySharp.Swashbuckle;
 
 [System.AttributeUsage(System.AttributeTargets.Method, AllowMultiple = false, Inherited = true)]
-public sealed class RequestModelAttribute : System.Attribute
+public sealed class RequestModelAttribute(System.Type modelType) : System.Attribute
 {
-  public System.Type ModelType { get; }
-  public RequestModelAttribute(System.Type modelType) => ModelType = modelType;
+  public System.Type ModelType { get; } = modelType;
 }
 
 [System.AttributeUsage(System.AttributeTargets.Method, AllowMultiple = false, Inherited = true)]

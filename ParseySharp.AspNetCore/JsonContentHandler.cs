@@ -18,7 +18,7 @@ internal sealed class JsonContentHandler : IContentHandler
       if (request.ContentLength is 0)
         return Right<string, object>(JsonDocument.Parse("null").RootElement);
 
-      using var doc = await JsonDocument.ParseAsync(request.Body, cancellationToken: ct);
+      using var doc = await JsonDocument.ParseAsync(request.Body, cancellationToken: ct).ConfigureAwait(false);
       // NOTE: we must copy the root element out because disposing the document invalidates it.
       var rootClone = JsonDocument.Parse(doc.RootElement.GetRawText()).RootElement;
       return Right<string, object>(rootClone);
