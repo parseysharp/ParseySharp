@@ -10,6 +10,12 @@
     <WarningsAsErrors>CS8600;CS8602;CS8603;CS8604;CS8618;CS8625</WarningsAsErrors>
   </PropertyGroup>
 
+  <!-- Single, repo-wide version (affects all packages) -->
+  <PropertyGroup>
+    <!-- Set the single version here; all packages inherit this -->
+    <Version>0.1.0-beta.2</Version>
+  </PropertyGroup>
+
   <!-- Shared NuGet package metadata -->
   <PropertyGroup>
     <!-- Publisher/org identity -->

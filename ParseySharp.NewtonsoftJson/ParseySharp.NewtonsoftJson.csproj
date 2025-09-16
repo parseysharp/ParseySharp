@@ -5,7 +5,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>ParseySharp.NewtonsoftJson</PackageId>
-    <Version>0.1.0</Version>
     <Description>Newtonsoft.Json navigator for ParseySharp: run parsers over JToken.</Description>
     <PackageTags>$(PackageTags);newtonsoftjson;json</PackageTags>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>

@@ -5,7 +5,6 @@
     <Nullable>enable</Nullable>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageId>ParseySharp.AspNetCore</PackageId>
-    <Version>0.1.0-beta.1</Version>
     <Description>ASP.NET Core integration for ParseySharp: parse multi-format request bodies and bind to models.</Description>
     <PackageTags>$(PackageTags);minimal-api;mvc;model-binding</PackageTags>
   </PropertyGroup>

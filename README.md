@@ -3,6 +3,7 @@
 Write your parser once. Run it everywhere (JSON, XML, YAML, Protobuf, MessagePack, Avro). First-class ASP.NET Core integration.
 
 This repository hosts the ParseySharp core and its ecosystem packages.
+Parsers return path-aware, accumulated errors, so you get precise paths (e.g., ["[3]","paymentMethod","cvv"]) and all issues across arrays/records in a single response.
 
 - Core: `ParseySharp/`
 - ASP.NET Core: `ParseySharp.AspNetCore/`
@@ -61,12 +62,12 @@ var paymentParser =
    from pm in paymentMethodType switch
    {
      PaymentMethodType.Card => (
-         Parse.As<string>().At("number", []),
-         Parse.Int32Flex().At("cvv", [])
+         Parse.As<string>().At("number"),
+         Parse.Int32Flex().At("cvv")
        ).Apply((number, cvv) => (PaymentMethod)new Card(number, cvv)).As(),
      PaymentMethodType.Ach => (
-         Parse.As<string>().At("routingNumber", []),
-         Parse.As<string>().At("accountNumber", [])
+         Parse.As<string>().At("routingNumber"),
+         Parse.As<string>().At("accountNumber")
        ).Apply((routingNumber, accountNumber) => (PaymentMethod)new Ach(routingNumber, accountNumber)).As(),
      _ => Parse.Fail<PaymentMethod>("Unsupported type")
    }
@@ -80,6 +81,34 @@ var okCard = paymentParser.ParseJson()(System.Text.Json.JsonDocument.Parse(cardJ
 
 var achJson = """{ "type":"Ach", "routingNumber":"021000021", "accountNumber":"000123456789" }""";
 var okAch = paymentParser.ParseJson()(System.Text.Json.JsonDocument.Parse(achJson).RootElement);
+
+// Array parse with accumulated, path-aware errors
+var invalidBatchJson = """
+[
+  { "type":"Card", "number":"4111111111111111", "cvv": 123 },
+  { "type":"Card", "number":"4111111111111111", "cvv": "abc" }, // type mismatch
+  { "type":"Card", "cvv": 123 } // missing field; error at parent
+]
+""";
+var invalidBatchResult = paymentParser
+  .Seq()
+  .ParseJson()(System.Text.Json.JsonDocument.Parse(invalidBatchJson).RootElement);
+
+// Produces the following errors:
+// [
+//   {
+//     "message": "Invalid integer: abc",
+//     "expected": "Int32",
+//     "actual": "abc",
+//     "path": ["[1]", "cvv"]
+//   },
+//   {
+//     "message": "Missing property number",
+//     "expected": "String",
+//     "actual": { "type": "Card", "cvv": 123 },
+//     "path": ["[2]"]
+//   }
+// ]
 ```
 
 ## Concepts in 60 seconds

@@ -5,7 +5,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>ParseySharp.MessagePack</PackageId>
-    <Version>0.1.0-beta.1</Version>
     <Description>MessagePack navigator for ParseySharp: run parsers over MessagePack nodes.</Description>
     <PackageTags>$(PackageTags);messagepack</PackageTags>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>

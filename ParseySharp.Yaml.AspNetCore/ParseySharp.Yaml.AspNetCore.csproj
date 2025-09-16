@@ -4,7 +4,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>ParseySharp.Yaml.AspNetCore</PackageId>
-    <Version>0.1.0</Version>
     <Description>ASP.NET Core integration for YAML (YamlDotNet) with ParseySharp: accept YAML payloads using the same parsers.</Description>
     <PackageTags>$(PackageTags);yaml;yamldotnet;aspnetcore</PackageTags>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>

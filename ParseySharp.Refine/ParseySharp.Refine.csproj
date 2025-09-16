@@ -4,7 +4,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>ParseySharp.Refine</PackageId>
-    <Version>0.1.0</Version>
     <Description>ParseySharp.Refine: lightweight refinement primitives for validated domains.</Description>
     <PackageTags>$(PackageTags);refinement;validation</PackageTags>
     <RepositoryType>git</RepositoryType>

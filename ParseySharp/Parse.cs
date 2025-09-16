@@ -72,8 +72,10 @@ public class OrElseParse<A>(Parse<A> p1, Parse<A> p2): Parse<A>
 public class PathParse<A>(string Name, ListZipper<PathSeg> Path, Parse<A> parser): Parse<A>
 {
   public Func<Unknown<B>, Validation<Seq<ParsePathErr>, A>> Run<B>(ParsePathNav<B> nav) =>
-    input => Parse.PrefixErrors(PathParser.Navigate(nav, Path, Name, input).Bind(x => parser.Run<B>(nav)(x)),
-      PathSegRender.ToStrings(Path.ToSeq()));
+    input => PathParser.Navigate(nav, Path, Name, input).Bind(x => 
+      Parse.PrefixErrors(
+        parser.Run<B>(nav)(x),
+        PathSegRender.ToStrings(Path.ToSeq())));
 }
 
 public class SeqParse<A>(Parse<A> parser): Parse<Seq<A>>
@@ -135,6 +137,9 @@ public static class ParseExtensions
 
   public static Parse<A> At<A>(this Parse<A> parser, PathSeg head, Seq<PathSeg> tail) =>
     new PathParse<A>(typeof(A).Name, ListZipper.FromCons(head, tail), parser);
+
+  public static Parse<A> At<A>(this Parse<A> parser, PathSeg head) =>
+    new PathParse<A>(typeof(A).Name, ListZipper.FromCons(head, []), parser);
     
   public static Func<Option<B>, Validation<Seq<ParsePathErr>, A>> RunNullableWithNav<A, B>(this Parse<A> parser, ParsePathNav<B> nav) =>
     input => parser.Run<B>(nav)(Unknown.UnsafeFromOption(input));

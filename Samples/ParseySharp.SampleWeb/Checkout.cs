@@ -111,15 +111,15 @@ public readonly record struct ValidCheckout(Refine.Refined<CheckoutRequest, Vali
 public static class Checkout
 {
   public static readonly Parse<ValidPayment> PaymentMethodParser =
-    (from paymentMethodType in Parse.Enum<PaymentMethodType>().At("type", [])
+    (from paymentMethodType in Parse.Enum<PaymentMethodType>().At("type")
      from pm in paymentMethodType.Match(
        Card: () => (
-           Parse.As<string>().At("number", []),
-           Parse.Int32Flex().At("cvv", [])
+           Parse.As<string>().At("number"),
+           Parse.Int32Flex().At("cvv")
          ).Apply((number, cvv) => (PaymentMethod)new Card(number, cvv)).As(),
        Ach: () => (
-           Parse.As<string>().At("routingNumber", []),
-           Parse.As<string>().At("accountNumber", [])
+           Parse.As<string>().At("routingNumber"),
+           Parse.As<string>().At("accountNumber")
          ).Apply((routingNumber, accountNumber) => (PaymentMethod)new Ach(routingNumber, accountNumber)).As()
      )
      select pm)
@@ -128,28 +128,28 @@ public static class Checkout
 
   public static readonly Parse<ValidItem> ItemParser =
     (
-      Parse.As<string>().At("sku", []),
-      Parse.Int32Flex().At("quantity", []),
-      Parse.DecimalFlex().At("unitPrice", [])
+      Parse.As<string>().At("sku"),
+      Parse.Int32Flex().At("quantity"),
+      Parse.DecimalFlex().At("unitPrice")
     ).Apply((sku, quantity, unitPrice) => new Item(sku, quantity, unitPrice))
     .As().Filter(ValidItem.Refined);
 
   public static readonly Parse<Option<PostalAddress>> PostalAddressParser =
     (
-      Parse.As<string>().At("line1", []),
-      Parse.As<string>().At("city", []),
-      Parse.As<string>().At("country", []),
-      Parse.As<string>().At("postal", [])
+      Parse.As<string>().At("line1"),
+      Parse.As<string>().At("city"),
+      Parse.As<string>().At("country"),
+      Parse.As<string>().At("postal")
     ).Apply((line1, city, country, postal) => new PostalAddress(line1, city, country, postal)).As().Option();
 
   public static readonly Parse<ValidCheckout> CheckoutParser =
     (
       Parse.As<string>()
         .Filter(Email.Refined)
-        .At("customerEmail", []),
-      PaymentMethodParser.At("paymentMethod", []),
-      ItemParser.Seq().At("items", []),
-      PostalAddressParser.At("shippingAddress", [])
+        .At("customerEmail"),
+      PaymentMethodParser.At("paymentMethod"),
+      ItemParser.Seq().At("items"),
+      PostalAddressParser.At("shippingAddress")
     ).Apply((customerEmail, paymentMethod, items, shippingAddress) =>
       new CheckoutRequest(
         customerEmail,

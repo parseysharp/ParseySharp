@@ -5,7 +5,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>ParseySharp.YamlDotNet</PackageId>
-    <Version>0.1.0</Version>
     <Description>YamlDotNet navigator for ParseySharp: run parsers over YAML nodes.</Description>
     <PackageTags>$(PackageTags);yaml;yamldotnet</PackageTags>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
