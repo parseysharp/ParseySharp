@@ -1,5 +1,6 @@
 using ParseySharp.AspNetCore;
 using ParseySharp.SampleWeb;
+using ParseySharp.Swashbuckle;
 using ParseySharp.Refine;
 
 var builder = WebApplication.CreateBuilder(args);

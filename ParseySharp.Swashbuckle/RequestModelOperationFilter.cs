@@ -6,6 +6,8 @@ using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.SwaggerGen;
 using ParseySharp.AspNetCore;
 
+namespace ParseySharp.Swashbuckle;
+
 // Uses the existing RequestModelMetadata added by SetRequestModel<T>()
 // - If an operation has a requestBody, set its schema to the declared model
 // - If there is no requestBody (e.g., GET), emit query parameters from the model's top-level properties
