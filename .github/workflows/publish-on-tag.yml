@@ -1,0 +1,79 @@
+name: Publish to NuGet on tag
+
+on:
+  push:
+    tags:
+      - "*"   # e.g., v0.2.1-beta.1 or 0.2.1-beta.1
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      TAG_NAME: ${{ github.ref_name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+          cache: true
+
+      - name: Verify tag matches Directory.Build.props <Version>
+        id: version
+        shell: bash
+        run: |
+          FILE="Directory.Build.props"
+          if [[ ! -f "$FILE" ]]; then
+            echo "Directory.Build.props not found at repo root." >&2
+            exit 1
+          fi
+          REPO_VERSION=$(sed -n 's|.*<Version>\(.*\)</Version>.*|\1|p' "$FILE" | head -n1 | xargs)
+          if [[ -z "$REPO_VERSION" ]]; then
+            echo "Could not read <Version> from $FILE" >&2
+            exit 1
+          fi
+          NORMALIZED_TAG="${TAG_NAME#v}"
+          echo "Repo version: $REPO_VERSION"
+          echo "Tag (normalized): $NORMALIZED_TAG"
+          if [[ "$REPO_VERSION" != "$NORMALIZED_TAG" ]]; then
+            echo "Tag does not match Directory.Build.props <Version> ($REPO_VERSION != $NORMALIZED_TAG)." >&2
+            exit 1
+          fi
+          echo "version=$REPO_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Restore
+        run: dotnet restore ParseySharpLib.sln
+
+      - name: Pack solution (symbols)
+        run: |
+          mkdir -p artifacts
+          dotnet pack ParseySharpLib.sln \
+            --configuration Release \
+            -p:PackageVersion="${{ steps.version.outputs.version }}" \
+            -p:IncludeSymbols=true \
+            -p:SymbolPackageFormat=snupkg \
+            -p:ContinuousIntegrationBuild=true \
+            -o artifacts
+
+      - name: Publish to NuGet
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          if [[ -z "$NUGET_API_KEY" ]]; then
+            echo "Missing NUGET_API_KEY secret." >&2
+            exit 1
+          fi
+          dotnet nuget push "artifacts/*.nupkg" \
+            --api-key "$NUGET_API_KEY" \
+            --source "https://api.nuget.org/v3/index.json" \
+            --skip-duplicate

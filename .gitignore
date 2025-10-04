@@ -79,3 +79,7 @@ local.settings.json
 
 # JetBrains Rider solution metadata (optional)
 *.sln.iml
+
+*.swp
+*.swo
+*.swn
