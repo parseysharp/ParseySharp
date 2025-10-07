@@ -357,7 +357,7 @@ public class ParserTests
         }
       };
 
-      var dynamoRoot = new AttributeValue { L = dynamoItems };
+    var dynamoRoot = new AttributeValue { L = dynamoItems };
       var dynamoResult = parser.ParseDynamoDb()(dynamoRoot);
       Console.WriteLine(dynamoResult);
 

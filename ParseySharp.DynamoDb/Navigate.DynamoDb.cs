@@ -131,19 +131,17 @@ public static class ParsePathNavDynamoDb
           return Right<Unknown<AttributeValue>, Unknown<object>>(Unknown.New<object>(projected));
         }
 
-        // List: expose items so Seq can iterate
+        // List: expose items so Seq can iterate (empty lists are valid in DynamoDB)
         if (av.L != null)
           return Right<Unknown<AttributeValue>, Unknown<object>>(Unknown.New<object>(av.L));
 
-        // Map: remain as node for key-based traversal
+        // Map: remain as node for key-based traversal (empty maps are valid in DynamoDB)
         if (av.M != null)
           return Right<Unknown<AttributeValue>, Unknown<object>>(Unknown.New<object>(av));
 
-        // Bool (placed after other checks to avoid misclassification)
-        if (av.BOOL == true)
-          return Right<Unknown<AttributeValue>, Unknown<object>>(Unknown.New<object>(true));
-        if (av.BOOL == false)
-          return Right<Unknown<AttributeValue>, Unknown<object>>(Unknown.New<object>(false));
+        // Bool false (placed after other checks to avoid misclassification)
+        if (av.BOOL.HasValue)
+          return Right<Unknown<AttributeValue>, Unknown<object>>(Unknown.New<object>(av.BOOL.Value));
 
         // Fallback: treat as None
         return Right<Unknown<AttributeValue>, Unknown<object>>(new Unknown<object>.None());
