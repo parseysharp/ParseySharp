@@ -9,6 +9,7 @@ using MessagePack;
 using MessagePack.Resolvers;
 using Avro;
 using Avro.Generic;
+using Amazon.DynamoDBv2.Model;
 
 namespace ParseySharp.Tests;
 
@@ -311,7 +312,57 @@ public class ParserTests
       var avroResult = parser.ParseAvro()(avroRows);
       Console.WriteLine(avroResult);
 
+      // DynamoDB AttributeValue input
+      var dynamoItems = new List<AttributeValue>
+      {
+        new AttributeValue
+        {
+          M = new Dictionary<string, AttributeValue>
+          {
+            ["kind"] = new AttributeValue { S = "left" },
+            ["left"] = new AttributeValue { S = "hello" }
+          }
+        },
+        new AttributeValue
+        {
+          M = new Dictionary<string, AttributeValue>
+          {
+            ["kind"] = new AttributeValue { S = "left" },
+            ["left"] = new AttributeValue { S = "clarice" }
+          }
+        },
+        new AttributeValue
+        {
+          M = new Dictionary<string, AttributeValue>
+          {
+            ["kind"] = new AttributeValue { S = "right" },
+            ["right"] = new AttributeValue { NULL = true }
+          }
+        },
+        new AttributeValue
+        {
+          M = new Dictionary<string, AttributeValue>
+          {
+            ["kind"] = new AttributeValue { S = "left" },
+            ["left"] = new AttributeValue { S = "fortytwo" }
+          }
+        },
+        new AttributeValue
+        {
+          M = new Dictionary<string, AttributeValue>
+          {
+            ["kind"] = new AttributeValue { S = "right" },
+            ["right"] = new AttributeValue { N = "42" }
+          }
+        }
+      };
+
+      var dynamoRoot = new AttributeValue { L = dynamoItems };
+      var dynamoResult = parser.ParseDynamoDb()(dynamoRoot);
+      Console.WriteLine(dynamoResult);
+
       Assert.Equal(result, avroResult);
+      Assert.Equal(result, dynamoResult);
       Assert.Equal(result, msgPackResult1);
       Assert.Equal(result, msgPackResult2);
       Assert.Equal(result, yamlResult);
