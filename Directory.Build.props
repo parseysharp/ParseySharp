@@ -13,7 +13,7 @@
   <!-- Single, repo-wide version (affects all packages) -->
   <PropertyGroup>
     <!-- Set the single version here; all packages inherit this -->
-    <Version>0.2.2-beta.1</Version>
+    <Version>0.2.3-beta.1</Version>
   </PropertyGroup>
 
   <!-- Shared NuGet package metadata -->
