@@ -59,8 +59,8 @@ public static class PathParser
   ) => input.Match(
     None: () => runNext(None).Map(Some),
     Some: i => getNext(i).Match<Validation<Seq<ParsePathErr>, Option<B>>>(
-      Left: (Unknown<B> x) => runNext(None).Map(Some),
-      Right: (Option<B> x) => x.Match(
+      Left: _ => runNext(None).Map(Some),
+      Right: x => x.Match(
         None: () => path.Nexts.IsEmpty
           ? Success<Seq<ParsePathErr>, Option<B>>(None)
           : runNext(None).Map(Some),

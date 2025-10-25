@@ -14,6 +14,8 @@
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
     <PackageReference Include="AWSSDK.DynamoDBv2" Version="4.0.6.3" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -28,6 +30,7 @@
     <ProjectReference Include="..\ParseySharp.MessagePack\ParseySharp.MessagePack.csproj" />
     <ProjectReference Include="..\ParseySharp.Avro\ParseySharp.Avro.csproj" />
     <ProjectReference Include="..\ParseySharp.DynamoDb\ParseySharp.DynamoDb.csproj" />
+    <ProjectReference Include="..\ParseySharp.Config\ParseySharp.Config.csproj" />
   </ItemGroup>
 
 </Project>

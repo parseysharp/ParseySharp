@@ -1,3 +1,5 @@
+namespace ParseySharp;
+
 public static class EitherExtensions
 {
   public static Either<L, R> Try<L, R>(this Func<R> f, Func<Exception, L> left)
@@ -11,4 +13,6 @@ public static class EitherExtensions
       return Left<L, R>(left(e));
     }
   }
+
+  public static Either<Error, R> ToEither<R>(this Try<R> t) => t.Match(Right<Error, R>, Left<Error, R>);
 }

@@ -4,6 +4,9 @@ using System.ComponentModel.DataAnnotations;
 using ParseySharp.AspNetCore;
 using ParseySharp.Refine;
 
+public record ParsedOpts<T>(T Value);
+public record MySettings(bool Enabled, string Endpoint, int Retries);
+
 public readonly record struct Email(Refine.Refined<string, Email> Inner): Refine.IRefine<string, Email>
 {
     public static Seq<string> Errors(string x) => 
@@ -106,6 +109,17 @@ public readonly record struct ValidCheckout(Refine.Refined<CheckoutRequest, Vali
 
   public static Either<Seq<string>, ValidCheckout> Refined(CheckoutRequest x) =>
     Refine.Create<CheckoutRequest, ValidCheckout>(x).Map<ValidCheckout>(x => new(x));
+
+  public object Serialize() => new {
+    CustomerEmail = Inner.Value.CustomerEmail.Inner.Value,
+    PaymentMethod = Inner.Value.PaymentMethod.Inner.Value.Match<object>(
+      Card: card => new { type = "card", last4 = card.Number[^4..] },
+      Ach: ach => new { type = "ach", routingLast4 = ach.RoutingNumber[^4..], accountLast4 = ach.AccountNumber[^4..] }
+    ),
+    Inner.Value.Total,
+    Items = Inner.Value.Items.Map(x => x.Inner.Value).ToList(),
+    ShippingAddress = Inner.Value.ShippingAddress.ToList()
+  };
 }
 
 public static class Checkout

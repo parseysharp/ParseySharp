@@ -10,6 +10,7 @@ using MessagePack.Resolvers;
 using Avro;
 using Avro.Generic;
 using Amazon.DynamoDBv2.Model;
+using Microsoft.Extensions.Configuration;
 
 namespace ParseySharp.Tests;
 
@@ -315,7 +316,7 @@ public class ParserTests
       // DynamoDB AttributeValue input
       var dynamoItems = new List<AttributeValue>
       {
-        new AttributeValue
+        new()
         {
           M = new Dictionary<string, AttributeValue>
           {
@@ -323,7 +324,7 @@ public class ParserTests
             ["left"] = new AttributeValue { S = "hello" }
           }
         },
-        new AttributeValue
+        new()
         {
           M = new Dictionary<string, AttributeValue>
           {
@@ -331,7 +332,7 @@ public class ParserTests
             ["left"] = new AttributeValue { S = "clarice" }
           }
         },
-        new AttributeValue
+        new()
         {
           M = new Dictionary<string, AttributeValue>
           {
@@ -339,7 +340,7 @@ public class ParserTests
             ["right"] = new AttributeValue { NULL = true }
           }
         },
-        new AttributeValue
+        new()
         {
           M = new Dictionary<string, AttributeValue>
           {
@@ -347,7 +348,7 @@ public class ParserTests
             ["left"] = new AttributeValue { S = "fortytwo" }
           }
         },
-        new AttributeValue
+        new()
         {
           M = new Dictionary<string, AttributeValue>
           {
@@ -357,10 +358,39 @@ public class ParserTests
         }
       };
 
-    var dynamoRoot = new AttributeValue { L = dynamoItems };
+      var dynamoRoot = new AttributeValue { L = dynamoItems };
       var dynamoResult = parser.ParseDynamoDb()(dynamoRoot);
-      Console.WriteLine(dynamoResult);
 
+      var configData = new Dictionary<string, string?>
+      {
+        ["0:kind"] = "left",
+        ["0:left"] = "hello",
+
+        ["1:kind"] = "left",
+        ["1:left"] = "clarice",
+
+        ["2:kind"] = "right",
+        ["2:right"] = null, // or "", both will be treated as None by the navigator
+
+        ["3:kind"] = "left",
+        ["3:left"] = "fortytwo",
+
+        ["4:kind"] = "right",
+        ["4:right"] = "42"  // string; parser can accept Int32Flex().Option()
+      };
+
+      var config = new ConfigurationBuilder()
+        .AddInMemoryCollection(configData)
+        .Build();
+
+      var configResult = parser.ParseConfiguration()(config);
+
+      // Optional to see it when running the test locally
+      Console.WriteLine(configResult);
+
+      // Assert parity with the canonical result
+
+      Assert.Equal(result, configResult);
       Assert.Equal(result, avroResult);
       Assert.Equal(result, dynamoResult);
       Assert.Equal(result, msgPackResult1);
