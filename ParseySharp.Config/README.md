@@ -81,7 +81,7 @@ var settings = app.Services.GetRequiredService<IOptions<MySettings>>().Value;
 {
   "mySettings": {
     "enabled": true,
-    "endpoint": "https://api.example.com",
+    "ndpnt": "https://api.example.com",
     "retries": "four"
   }
 }
