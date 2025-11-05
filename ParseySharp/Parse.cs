@@ -140,7 +140,13 @@ public static class ParseExtensions
 
   public static Parse<A> At<A>(this Parse<A> parser, PathSeg head) =>
     new PathParse<A>(typeof(A).Name, ListZipper.FromCons(head, []), parser);
-    
+
+  public static Parse<Option<A>> OptionalAt<A>(this Parse<A> parser, PathSeg head, Seq<PathSeg> tail) =>
+    toSeq(([head] + tail).Reverse()).Fold(
+      parser.Option(),
+      s => p => p.Option().At(s).Map(x => x.Flatten()).As()
+    ).Option().Map(x => x.Flatten()).As();
+
   public static Func<Option<B>, Validation<Seq<ParsePathErr>, A>> RunNullableWithNav<A, B>(this Parse<A> parser, ParsePathNav<B> nav) =>
     input => parser.Run<B>(nav)(Unknown.UnsafeFromOption(input));
 

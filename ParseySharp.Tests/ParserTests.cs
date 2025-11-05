@@ -66,6 +66,63 @@ public class ParserTests
     select v).As();
 
   [Fact]
+    public void Parses_Optional_Paths()
+    {
+    var parser = Parse.As<string>().OptionalAt("some", ["nested", "path"]);
+
+    var objInput = Obj.Record([
+      ("some", Obj.Record([
+        ("nested", Obj.Record([
+          ("path", "hello")
+        ]))
+      ]))
+    ]);
+
+    var result = parser.ParseObject()(objInput!);
+    Console.WriteLine(result);
+    Assert.Equal(Success<Seq<ParsePathErr>, Option<string>>(Some("hello")), result);
+
+    var objInput2 = Obj.Record([
+      ("some", Obj.Record([
+        ("nested", Obj.Record([]))
+      ]))
+    ]);
+
+    var result2 = parser.ParseObject()(objInput2!);
+    Console.WriteLine(result2);
+
+
+    var jsonInput = """
+    {
+      "some": {
+        "nested": {
+          "path": "hello"
+        }
+      }
+    }
+    """;
+
+    var jsonResult = parser.ParseJson()(JsonDocument.Parse(jsonInput).RootElement);
+    Console.WriteLine(jsonResult);
+
+    var jsonInput2 = """
+    {
+      "some": {
+        "nested": {}
+      }
+    }
+    """;
+
+    var jsonResult2 = parser.ParseJson()(JsonDocument.Parse(jsonInput2).RootElement);
+    Console.WriteLine(jsonResult2);
+
+    Assert.Equal(Success<Seq<ParsePathErr>, Option<string>>(Some("hello")), result);
+    Assert.Equal(Success<Seq<ParsePathErr>, Option<string>>(None), result2);
+    Assert.Equal(Success<Seq<ParsePathErr>, Option<string>>(Some("hello")), jsonResult);
+    Assert.Equal(Success<Seq<ParsePathErr>, Option<string>>(None), jsonResult2);
+  }
+
+  [Fact]
     public void Builds_A_Parser()
     {
       var singleParser = EitherParser(
