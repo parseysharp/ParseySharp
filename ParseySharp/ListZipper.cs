@@ -43,5 +43,4 @@ public static class ListZipper
 
   public static ListZipper<A> FromCons<A>(A head, Seq<A> xs) =>
       new([], head, xs);
-
 }

@@ -4,32 +4,44 @@ namespace ParseySharp.AspNetCore;
 
 public static class EndpointBuilders
 {
-  // Strict builder: parser is a required argument at route-definition time
 
-  // Overload that allows async handler returning IResult
   public static RouteHandlerBuilder MapParsedPost<T>(
     this IEndpointRouteBuilder app,
     string pattern,
     Parse<T> parser,
-    Func<T, Task<IResult>> handler)
+    Func<HttpContext, T, Task<IResult>> handler)
   {
     return app.MapPost(pattern, async (HttpContext ctx, IParseBinder binder, IProblemMapper problems) =>
     {
       var res = await binder.ParseAsync(ctx.Request, parser, ctx.RequestAborted).ConfigureAwait(false);
       return await res.Match(
         Fail: errs => Task.FromResult<IResult>(Results.Problem(problems.ToProblem(errs))),
-        Succ: val => handler(val)
+        Succ: val => handler(ctx, val)
       ).ConfigureAwait(false);
     });
   }
 
+  public static RouteHandlerBuilder MapParsedPost<T>(
+    this IEndpointRouteBuilder app,
+    string pattern,
+    Parse<T> parser,
+    Func<IServiceProvider, T, Task<IResult>> handler) =>
+    app.MapParsedPost(pattern, parser, (ctx, val) => handler(ctx.RequestServices, val));
+
   
+  public static RouteHandlerBuilder MapParsedPost<T>(
+    this IEndpointRouteBuilder app,
+    string pattern,
+    Parse<T> parser,
+    Func<T, Task<IResult>> handler) =>
+    app.MapParsedPost(pattern, parser, 
+      (HttpContext _, T val) => handler(val));
 
   public static RouteHandlerBuilder MapParsedGet<T>(
     this IEndpointRouteBuilder app,
     string pattern,
     Parse<T> parser,
-    Func<T, Task<IResult>> handler)
+    Func<HttpContext, T, Task<IResult>> handler)
   {
     return app.MapGet(pattern, async (HttpContext ctx, IParseBinder binder, IProblemMapper problems) =>
     {
@@ -37,44 +49,85 @@ public static class EndpointBuilders
       var res = await binder.ParseAsync(ctx.Request, parser, ctx.RequestAborted).ConfigureAwait(false);
       return await res.Match(
         Fail: errs => Task.FromResult<IResult>(Results.Problem(problems.ToProblem(errs))),
-        Succ: val => handler(val)
+        Succ: val => handler(ctx, val)
       ).ConfigureAwait(false);
     });
   }
 
-  
+  public static RouteHandlerBuilder MapParsedGet<T>(
+    this IEndpointRouteBuilder app,
+    string pattern,
+    Parse<T> parser,
+    Func<IServiceProvider, T, Task<IResult>> handler) =>
+    app.MapParsedGet(pattern, parser, (ctx, val) => handler(ctx.RequestServices, val));
+
+  public static RouteHandlerBuilder MapParsedGet<T>(
+    this IEndpointRouteBuilder app,
+    string pattern,
+    Parse<T> parser,
+    Func<T, Task<IResult>> handler) =>
+    app.MapParsedGet(pattern, parser, 
+      (HttpContext _, T val) => handler(val));
 
   public static RouteHandlerBuilder MapParsedPut<T>(
     this IEndpointRouteBuilder app,
     string pattern,
     Parse<T> parser,
-    Func<T, Task<IResult>> handler)
+    Func<HttpContext, T, Task<IResult>> handler)
   {
     return app.MapPut(pattern, async (HttpContext ctx, IParseBinder binder, IProblemMapper problems) =>
     {
       var res = await binder.ParseAsync(ctx.Request, parser, ctx.RequestAborted).ConfigureAwait(false);
       return await res.Match(
         Fail: errs => Task.FromResult<IResult>(Results.Problem(problems.ToProblem(errs))),
-        Succ: val => handler(val)
+        Succ: val => handler(ctx, val)
       ).ConfigureAwait(false);
     });
   }
 
-  
+  public static RouteHandlerBuilder MapParsedPut<T>(
+    this IEndpointRouteBuilder app,
+    string pattern,
+    Parse<T> parser,
+    Func<IServiceProvider, T, Task<IResult>> handler) =>
+    app.MapParsedPut(pattern, parser, (ctx, val) => handler(ctx.RequestServices, val));
+
+  public static RouteHandlerBuilder MapParsedPut<T>(
+    this IEndpointRouteBuilder app,
+    string pattern,
+    Parse<T> parser,
+    Func<T, Task<IResult>> handler) =>
+    app.MapParsedPut(pattern, parser, 
+      (HttpContext _, T val) => handler(val));
 
   public static RouteHandlerBuilder MapParsedDelete<T>(
     this IEndpointRouteBuilder app,
     string pattern,
     Parse<T> parser,
-    Func<T, Task<IResult>> handler)
+    Func<HttpContext, T, Task<IResult>> handler)
   {
     return app.MapDelete(pattern, async (HttpContext ctx, IParseBinder binder, IProblemMapper problems) =>
     {
       var res = await binder.ParseAsync(ctx.Request, parser, ctx.RequestAborted).ConfigureAwait(false);
       return await res.Match(
         Fail: errs => Task.FromResult<IResult>(Results.Problem(problems.ToProblem(errs))),
-        Succ: val => handler(val)
+        Succ: val => handler(ctx, val)
       ).ConfigureAwait(false);
     });
   }
+
+  public static RouteHandlerBuilder MapParsedDelete<T>(
+    this IEndpointRouteBuilder app,
+    string pattern,
+    Parse<T> parser,
+    Func<IServiceProvider, T, Task<IResult>> handler) =>
+    app.MapParsedDelete(pattern, parser, (ctx, val) => handler(ctx.RequestServices, val));
+
+  public static RouteHandlerBuilder MapParsedDelete<T>(
+    this IEndpointRouteBuilder app,
+    string pattern,
+    Parse<T> parser,
+    Func<T, Task<IResult>> handler) =>
+    app.MapParsedDelete(pattern, parser, 
+      (HttpContext _, T val) => handler(val));
 }
