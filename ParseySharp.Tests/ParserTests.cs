@@ -207,6 +207,10 @@ public class ParserTests
 
       Console.WriteLine(xmlResult);
 
+      Assert.Equal(
+        Success<Seq<ParsePathErr>, string>(""),
+        Parse.As<string>().ParseJsonNode()(JsonNode.Parse("\"\"")!)
+        );
       JsonNode node = JsonNode.Parse("""
         [
           { "kind": "left",  "left": "hello" },

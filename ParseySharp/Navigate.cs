@@ -271,9 +271,7 @@ public static class ParsePathNav
             v.TryGetValue<long>(out var lv)   ? Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(lv)) :
             v.TryGetValue<double>(out var dv) ? Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(dv)) :
             v.TryGetValue<bool>(out var bv)   ? Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(bv)) :
-            v.TryGetValue<string>(out var sv) ? (string.IsNullOrWhiteSpace(sv)
-                                                  ? Right<Unknown<JsonNode>, Unknown<object>>(Unknown.UnsafeFromOption<object>(None))
-                                                  : Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(sv)))
+            v.TryGetValue<string>(out var sv) ? Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(sv))
                                               : Right<Unknown<JsonNode>, Unknown<object>>(Unknown.UnsafeFromOption<object>(None)),
           _ => Left<Unknown<JsonNode>, Unknown<object>>(Unknown.New(jn))
         },
