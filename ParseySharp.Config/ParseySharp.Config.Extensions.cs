@@ -33,6 +33,7 @@ public static class ParseConfigExtensions
   }
 }
 
+public record ParseOptionsError(string SectionName, Seq<ParsePathErr> Errors);
 
 // TODO - support ChangeToken
 public static class ParseConfigOptionsExtensions
@@ -53,15 +54,38 @@ public static class ParseConfigOptionsExtensions
         );
 
     v.Match(
-      Fail: errs => throw new InvalidOperationException(
-        $"\n\nFailed to bind {
-          typeof(T).FullName} from configuration {
-          sectionName ?? "root"}:\n\n{
-          string.Join("\n", errs.Map(x => x.ToString()))}\n\n"
-      ),
+      Fail: errs => throw errs.ToConfigurationBindingException<T>(sectionName),
       Succ: value => builder.Services.AddSingleton<IOptions<T>>(Options.Create(value))
     );
 
     return builder;
   }
+
+  public static Either<ParseOptionsError, T> ParseOptions<T>(
+    this IConfiguration configuration,
+    string sectionName,
+    Parse<T> parser
+  ) =>
+    Optional(sectionName)
+      .Filter(n => !string.IsNullOrWhiteSpace(n))
+      .Match(
+        None: () => parser.ParseConfiguration()(configuration),
+        Some: n => parser.ParseConfigSection()(configuration.GetSection(n))
+      )
+      .ToEither()
+      .MapLeft(errs => new ParseOptionsError(sectionName, errs));
+
+  public static T GetOrThrow<T>(this Either<ParseOptionsError, T> result) =>
+    result.Match(
+      Right: v => v,
+      Left: e => throw e.Errors.ToConfigurationBindingException<T>(e.SectionName)
+    );
+
+  public static InvalidOperationException ToConfigurationBindingException<T>(
+    this Seq<ParsePathErr> errors,
+    string? sectionName
+  ) =>
+    new InvalidOperationException(
+      $"\n\nFailed to bind {typeof(T).FullName} from configuration {sectionName ?? "root"}:\n\n{string.Join("\n", errors.Map(x => x.ToString()))}\n\n"
+    );
 }
