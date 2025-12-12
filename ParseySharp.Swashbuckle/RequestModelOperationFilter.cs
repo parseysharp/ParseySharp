@@ -1,10 +1,9 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Controllers;
-using Microsoft.OpenApi.Any;
-using Microsoft.OpenApi.Interfaces;
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
 using Swashbuckle.AspNetCore.SwaggerGen;
 using ParseySharp.AspNetCore;
+using System.Text.Json.Nodes;
 
 namespace ParseySharp.Swashbuckle;
 
@@ -30,30 +29,38 @@ public sealed class RequestModelOperationFilter : IOperationFilter
     ApplyBody(operation, normalized, context);
   }
 
-  private static (IDictionary<string, OpenApiSchema> props, ISet<string>? required)
-    ResolveProperties(OpenApiSchema schema, SchemaRepository repo)
+  private static (IDictionary<string, IOpenApiSchema>? props, ISet<string>? required)
+    ResolveProperties(IOpenApiSchema schema, SchemaRepository repo)
   {
     // Unwrap $ref
-    if (schema.Reference is not null && repo.Schemas.TryGetValue(schema.Reference.Id, out var target))
-      return (target.Properties, target.Required is null ? null : new HashSet<string>(target.Required));
-
-    // Unwrap allOf single inheritance pattern (common for records)
-    if (schema.AllOf != null && schema.AllOf.Count > 0)
+    if (schema is OpenApiSchemaReference schemaRef && schemaRef.Id != null && repo.Schemas.TryGetValue(schemaRef.Id, out var target))
     {
-      foreach (var s in schema.AllOf)
-      {
-        var (props, req) = ResolveProperties(s, repo);
-        if (props.Count > 0)
-          return (props, req);
-      }
+      if (target is OpenApiSchema targetSchema)
+        return (targetSchema.Properties, targetSchema.Required is null ? null : new HashSet<string>(targetSchema.Required));
     }
 
-    return (schema.Properties, schema.Required is null ? null : new HashSet<string>(schema.Required));
+    if (schema is OpenApiSchema openApiSchema)
+    {
+      // Unwrap allOf single inheritance pattern (common for records)
+      if (openApiSchema.AllOf != null && openApiSchema.AllOf.Count > 0)
+      {
+        foreach (var s in openApiSchema.AllOf)
+        {
+          var (props, req) = ResolveProperties(s, repo);
+          if (props != null && props.Count > 0)
+            return (props, req);
+        }
+      }
+
+      return (openApiSchema.Properties, openApiSchema.Required is null ? null : new HashSet<string>(openApiSchema.Required));
+    }
+
+    return (null, null);
   }
 
   private enum Mode { Query, Body }
 
-  private sealed record Normalized(Mode Mode, Type RequestType, OpenApiSchema Schema, IReadOnlyList<string> MediaTypes);
+  private sealed record Normalized(Mode Mode, Type RequestType, IOpenApiSchema Schema, IReadOnlyList<string> MediaTypes);
 
   private static bool IsMvc(OperationFilterContext ctx)
     => ctx.ApiDescription.ActionDescriptor is ControllerActionDescriptor;
@@ -120,7 +127,7 @@ public sealed class RequestModelOperationFilter : IOperationFilter
     operation.Parameters ??= [];
 
     var (props, requiredSet) = ResolveProperties(n.Schema, ctx.SchemaRepository);
-    if (props.Count == 0)
+    if (props is null || props.Count == 0)
     {
       foreach (var p in n.RequestType.GetProperties(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public))
       {
@@ -160,9 +167,10 @@ public sealed class RequestModelOperationFilter : IOperationFilter
   private static void ApplyBody(OpenApiOperation operation, Normalized n, OperationFilterContext context)
   {
     operation.RequestBody ??= new OpenApiRequestBody { Required = true, Content = new Dictionary<string, OpenApiMediaType>() };
+    
     foreach (var mt in n.MediaTypes)
     {
-      if (!operation.RequestBody.Content.TryGetValue(mt, out var content))
+      if (!operation.RequestBody.Content!.TryGetValue(mt, out var content))
       {
         content = new OpenApiMediaType();
         operation.RequestBody.Content[mt] = content;
@@ -201,7 +209,10 @@ public sealed class RequestModelOperationFilter : IOperationFilter
         }
 
         // Append format selector information if present (from x-formatSelectors)
-        if (content.Schema.Extensions != null && content.Schema.Extensions.TryGetValue("x-formatSelectors", out var ext) && ext is OpenApiObject fmtObj && fmtObj.Count > 0)
+        if (content.Schema is OpenApiSchema contentSchema && 
+            contentSchema.Extensions != null && 
+            contentSchema.Extensions.TryGetValue("x-formatSelectors", out var ext) && 
+            ext is JsonNodeExtension jsonNodeExt && jsonNodeExt.Node is JsonObject fmtObj)
         {
           var sb = new System.Text.StringBuilder();
           sb.AppendLine();
@@ -209,15 +220,15 @@ public sealed class RequestModelOperationFilter : IOperationFilter
           foreach (var kv in fmtObj)
           {
             var fieldName = kv.Key;
-            if (kv.Value is OpenApiArray arr)
+            if (kv.Value is JsonArray arr)
             {
               var pairs = new List<string>();
               foreach (var any in arr)
               {
-                if (any is OpenApiObject o && o.TryGetValue("name", out var nameAny) && o.TryGetValue("contentType", out var ctAny))
+                if (any is JsonObject o && o.TryGetPropertyValue("name", out var nameAny) && o.TryGetPropertyValue("contentType", out var ctAny))
                 {
-                  var fmtName = (nameAny as OpenApiString)?.Value ?? "";
-                  var ct = (ctAny as OpenApiString)?.Value ?? "application/octet-stream";
+                  var fmtName = nameAny?.GetValue<string>() ?? "";
+                  var ct = ctAny?.GetValue<string>() ?? "application/octet-stream";
                   pairs.Add($"{fmtName} ({ct})");
                 }
               }
@@ -244,8 +255,10 @@ public sealed class RequestModelOperationFilter : IOperationFilter
     }
   }
 
-  private static OpenApiSchema CoerceEnumSchemaIfNeeded(OpenApiSchema schema, Type clrType)
+  private static IOpenApiSchema CoerceEnumSchemaIfNeeded(IOpenApiSchema schema, Type clrType)
   {
+    if (schema is not OpenApiSchema openApiSchema) return schema;
+
     // Handle Nullable<T>
     var t = Nullable.GetUnderlyingType(clrType) ?? clrType;
 
@@ -253,41 +266,40 @@ public sealed class RequestModelOperationFilter : IOperationFilter
     if (t.IsArray)
     {
       var elem = t.GetElementType()!;
-      if (schema.Items is not null)
-        schema.Items = CoerceEnumSchemaIfNeeded(schema.Items, elem);
-      return schema;
+      if (openApiSchema.Items is not null)
+        openApiSchema.Items = CoerceEnumSchemaIfNeeded(openApiSchema.Items, elem);
+      return openApiSchema;
     }
 
     var ienum = GetIEnumerableElementType(t);
-    if (ienum is not null && schema.Items is not null)
+    if (ienum is not null && openApiSchema.Items is not null)
     {
-      schema.Items = CoerceEnumSchemaIfNeeded(schema.Items, ienum);
-      return schema;
+      openApiSchema.Items = CoerceEnumSchemaIfNeeded(openApiSchema.Items, ienum);
+      return openApiSchema;
     }
 
     if (t.IsEnum)
     {
       // Break component references for enum properties so we can inline string-enum
-      schema.Reference = null;
-      schema.AllOf = null;
-      schema.OneOf = null;
-      schema.AnyOf = null;
-      schema.Type = "string";
-      schema.Format = null;
+      openApiSchema.AllOf = null;
+      openApiSchema.OneOf = null;
+      openApiSchema.AnyOf = null;
+      openApiSchema.Type = JsonSchemaType.String;
+      openApiSchema.Format = null;
       var names = System.Enum.GetNames(t);
-      schema.Enum = names.Select(n => (IOpenApiAny)new OpenApiString(n)).ToList();
+      openApiSchema.Enum = names.Select(n => (JsonNode)JsonValue.Create(n)!).ToList();
       // If previous Default/Example were numeric, replace with first name example
-      if (schema.Default is OpenApiInteger || schema.Default is OpenApiLong || schema.Default is OpenApiDouble)
-        schema.Default = new OpenApiString(names.First());
-      if (schema.Example is null || schema.Example is OpenApiInteger || schema.Example is OpenApiLong || schema.Example is OpenApiDouble)
-        schema.Example = new OpenApiString(names.First());
-      return schema;
+      if (openApiSchema.Default is JsonValue defVal && (defVal.TryGetValue<int>(out _) || defVal.TryGetValue<long>(out _) || defVal.TryGetValue<double>(out _)))
+        openApiSchema.Default = JsonValue.Create(names.First());
+      if (openApiSchema.Example is null || (openApiSchema.Example is JsonValue exVal && (exVal.TryGetValue<int>(out _) || exVal.TryGetValue<long>(out _) || exVal.TryGetValue<double>(out _))))
+        openApiSchema.Example = JsonValue.Create(names.First());
+      return openApiSchema;
     }
 
-    return schema;
+    return openApiSchema;
   }
 
-  private static void CoerceEnumPropertiesRecursive(OpenApiSchema schema, Type clrType, SchemaRepository repo)
+  private static void CoerceEnumPropertiesRecursive(IOpenApiSchema schema, Type clrType, SchemaRepository repo)
   {
     var (props, _) = ResolveProperties(schema, repo);
     if (props is null || props.Count == 0) return;
@@ -307,18 +319,21 @@ public sealed class RequestModelOperationFilter : IOperationFilter
       if (!innerType.IsPrimitive && !innerType.IsEnum && innerType != typeof(string))
       {
         // Array / IEnumerable element recursion
-        if (innerType.IsArray && propSchema.Items is not null)
+        if (propSchema is OpenApiSchema openApiPropSchema)
         {
-          var elem = innerType.GetElementType()!;
-          CoerceEnumPropertiesRecursive(propSchema.Items, elem, repo);
-        }
-        else
-        {
-          var elemI = GetIEnumerableElementType(innerType);
-          if (elemI is not null && propSchema.Items is not null)
-            CoerceEnumPropertiesRecursive(propSchema.Items, elemI, repo);
+          if (innerType.IsArray && openApiPropSchema.Items is not null)
+          {
+            var elem = innerType.GetElementType()!;
+            CoerceEnumPropertiesRecursive(openApiPropSchema.Items, elem, repo);
+          }
           else
-            CoerceEnumPropertiesRecursive(propSchema, innerType, repo);
+          {
+            var elemI = GetIEnumerableElementType(innerType);
+            if (elemI is not null && openApiPropSchema.Items is not null)
+              CoerceEnumPropertiesRecursive(openApiPropSchema.Items, elemI, repo);
+            else
+              CoerceEnumPropertiesRecursive(propSchema, innerType, repo);
+          }
         }
       }
     }
@@ -353,10 +368,10 @@ public sealed class RequestModelOperationFilter : IOperationFilter
 
   private sealed record FilePartDoc(string Name, string ContentType, Type? ModelType, bool IsArray);
 
-  private static (OpenApiSchema mpSchema, IDictionary<string, OpenApiEncoding> encodings, List<FilePartDoc> parts, List<string> otherParts)
-    BuildMultipartSchema(Type requestType, OpenApiSchema fallback)
+  private static (IOpenApiSchema mpSchema, IDictionary<string, OpenApiEncoding> encodings, List<FilePartDoc> parts, List<string> otherParts)
+    BuildMultipartSchema(Type requestType, IOpenApiSchema fallback)
   {
-    var schema = new OpenApiSchema { Type = "object", Properties = new Dictionary<string, OpenApiSchema>() };
+    var schema = new OpenApiSchema { Type = JsonSchemaType.Object, Properties = new Dictionary<string, IOpenApiSchema>() };
     var enc = new Dictionary<string, OpenApiEncoding>(StringComparer.OrdinalIgnoreCase);
     var parts = new List<FilePartDoc>();
     var others = new List<string>();
@@ -373,7 +388,7 @@ public sealed class RequestModelOperationFilter : IOperationFilter
 
       if (IsIFormFileType(t))
       {
-        schema.Properties[name] = new OpenApiSchema { Type = "string", Format = "binary" };
+        schema.Properties[name] = new OpenApiSchema { Type = JsonSchemaType.String, Format = "binary" };
         enc[name] = new OpenApiEncoding { ContentType = "application/octet-stream" };
         parts.Add(new FilePartDoc(name, "application/octet-stream", null, false));
         continue;
@@ -383,8 +398,8 @@ public sealed class RequestModelOperationFilter : IOperationFilter
       {
         schema.Properties[name] = new OpenApiSchema
         {
-          Type = "array",
-          Items = new OpenApiSchema { Type = "string", Format = "binary" }
+          Type = JsonSchemaType.Array,
+          Items = new OpenApiSchema { Type = JsonSchemaType.String, Format = "binary" }
         };
         enc[name] = new OpenApiEncoding { ContentType = "application/octet-stream" };
         parts.Add(new FilePartDoc(name, "application/octet-stream", null, true));
@@ -394,7 +409,7 @@ public sealed class RequestModelOperationFilter : IOperationFilter
       if (IsFileUploadMarker(t))
       {
         // Default file schema
-        var fileSchema = new OpenApiSchema { Type = "string", Format = "binary" };
+        var fileSchema = new OpenApiSchema { Type = JsonSchemaType.String, Format = "binary" };
 
         // If format is provided via FileUpload<TFormat,...>, prefer that for encoding content type
         string? contentType = null;
@@ -424,7 +439,7 @@ public sealed class RequestModelOperationFilter : IOperationFilter
         {
           fileSchema.Extensions ??= new Dictionary<string, IOpenApiExtension>();
           // Human-friendly name
-          fileSchema.Extensions["x-fileModel"] = new OpenApiString(modelType.Name);
+          fileSchema.Extensions["x-fileModel"] = new JsonNodeExtension(JsonValue.Create(modelType.Name));
         }
         parts.Add(new FilePartDoc(name, contentType ?? "application/octet-stream", modelType, false));
         continue;
@@ -438,8 +453,8 @@ public sealed class RequestModelOperationFilter : IOperationFilter
         {
           var s = new OpenApiSchema
           {
-            Type = "string",
-            Enum = infos.Select(fi => (IOpenApiAny)new OpenApiString(fi.Name)).ToList()
+            Type = JsonSchemaType.String,
+            Enum = infos.Select(fi => (JsonNode)JsonValue.Create(fi.Name)!).ToList()
           };
           schema.Properties[name] = s;
           formatSelectors[name] = infos;
@@ -448,7 +463,7 @@ public sealed class RequestModelOperationFilter : IOperationFilter
       }
 
       // Fallback: leave as simple string for multipart; detailed schema is available in other content types
-      schema.Properties[name] = new OpenApiSchema { Type = "string" };
+      schema.Properties[name] = new OpenApiSchema { Type = JsonSchemaType.String };
       others.Add(name);
     }
 
@@ -459,23 +474,23 @@ public sealed class RequestModelOperationFilter : IOperationFilter
     // If we collected any format selectors, persist them in an extension so ApplyBody can render a concise description
     if (formatSelectors.Count > 0)
     {
-      var obj = new OpenApiObject();
+      var obj = new JsonObject();
       foreach (var kv in formatSelectors)
       {
-        var arr = new OpenApiArray();
+        var arr = new JsonArray();
         foreach (var fi in kv.Value)
         {
-          var item = new OpenApiObject
+          var item = new JsonObject
           {
-            ["name"] = new OpenApiString(fi.Name),
-            ["contentType"] = new OpenApiString(fi.ContentType)
+            ["name"] = JsonValue.Create(fi.Name),
+            ["contentType"] = JsonValue.Create(fi.ContentType)
           };
           arr.Add(item);
         }
         obj[kv.Key] = arr;
       }
       schema.Extensions ??= new Dictionary<string, IOpenApiExtension>();
-      schema.Extensions["x-formatSelectors"] = obj;
+      schema.Extensions["x-formatSelectors"] = new JsonNodeExtension(obj);
     }
 
     return (schema, enc, parts, others);
@@ -488,24 +503,27 @@ public sealed class RequestModelOperationFilter : IOperationFilter
     {
       var s = ctx.SchemaGenerator.GenerateSchema(t, ctx.SchemaRepository);
       var (props, required) = ResolveProperties(s, ctx.SchemaRepository);
-      if (props.Count == 0)
+      if (props is null || props.Count == 0)
         return t.Name;
 
-      static string Map(OpenApiSchema ps)
+      static string Map(IOpenApiSchema ps)
       {
-        if (ps.Type == "array" && ps.Items is not null)
+        if (ps is OpenApiSchema openApiSchema)
         {
-          var inner = Map(ps.Items);
-          return inner + "[]";
-        }
-        if (!string.IsNullOrWhiteSpace(ps.Type))
-        {
-          return ps.Format switch
+          if (openApiSchema.Type != null && (openApiSchema.Type.Value & JsonSchemaType.Array) == JsonSchemaType.Array && openApiSchema.Items is not null)
           {
-            "int32" => "int",
-            "int64" => "long",
-            _ => ps.Type
-          };
+            var inner = Map(openApiSchema.Items);
+            return inner + "[]";
+          }
+          if (openApiSchema.Type != null && openApiSchema.Type.Value != 0)
+          {
+            return openApiSchema.Format switch
+            {
+              "int32" => "int",
+              "int64" => "long",
+              _ => openApiSchema.Type.Value.ToString().ToLowerInvariant()
+            };
+          }
         }
         // Fallback when type is unset (refs/objects)
         return "object";
