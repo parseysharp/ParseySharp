@@ -12,7 +12,7 @@ builder.Services
   .AddEndpointsApiExplorer()
   .AddSwaggerGen(c =>
   {
-    c.OperationFilter<RequestModelOperationFilter>();
+    c.AddParseySharpDefaults();
   })
   .AddParseySharpCore()
   .AddParseySharpMessagePack()
@@ -90,4 +90,11 @@ Task.FromResult<IResult>(
 .AcceptsMultipart()
 .SetRequestModel<CheckoutHistoryDoc>();
 
+app.MapParsedGet("/echo-card-type",
+  Parse.Enum<PaymentMethodType>().At("method"),
+  method => Task.FromResult(Results.Ok(new { method = method.ToString() }))
+).AcceptsQueryString().SetRequestModel<EchoCardTypeRequest>();
+
 app.Run();
+
+public record EchoCardTypeRequest(PaymentMethodType Method);
