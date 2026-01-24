@@ -3,16 +3,10 @@ using Microsoft.AspNetCore.Mvc;
 namespace ParseySharp.AspNetCore;
 
 // Pure binder: chooses a handler and runs the parser; only side-effect is reading body
-internal sealed class ParseBinder : IParseBinder
+internal sealed class ParseBinder(IEnumerable<IContentHandler> handlers, ParseySharpOptions options) : IParseBinder
 {
-  private readonly IReadOnlyList<IContentHandler> _handlers;
-  private readonly ParseySharpOptions _options;
-
-  public ParseBinder(IEnumerable<IContentHandler> handlers, ParseySharpOptions options)
-  {
-    _handlers = handlers.ToList();
-    _options = options;
-  }
+  private readonly IReadOnlyList<IContentHandler> _handlers = handlers.ToList();
+  private readonly ParseySharpOptions _options = options;
 
   public async Task<Validation<Seq<ParsePathErr>, A>> ParseAsync<A>(HttpRequest request, Parse<A> parser, CancellationToken ct)
   {
