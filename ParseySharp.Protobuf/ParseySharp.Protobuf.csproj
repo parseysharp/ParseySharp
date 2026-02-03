@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>ParseySharp.Protobuf</PackageId>
@@ -11,7 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="LanguageExt.Core" Version="5.0.0-beta-54" />
+    <PackageReference Include="LanguageExt.Core" Version="5.0.0-beta-77" />
     <PackageReference Include="Google.Protobuf" Version="3.25.3" />
   </ItemGroup>
 

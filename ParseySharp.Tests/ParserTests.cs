@@ -211,6 +211,7 @@ public class ParserTests
         Success<Seq<ParsePathErr>, string>(""),
         Parse.As<string>().ParseJsonNode()(JsonNode.Parse("\"\"")!)
         );
+
       JsonNode node = JsonNode.Parse("""
         [
           { "kind": "left",  "left": "hello" },
@@ -478,5 +479,17 @@ public class ParserTests
           Left<string, Option<int>>("fortytwo"),
           Right<string, Option<int>>(Some(42))]
         ));
+
+      // Test Recur via Applicative.actions - sequences parsers using stack-safe iteration
+      var parsers = IterableNE.create<K<Parse, string>>(
+        Parse.As<string>().At("a"),
+        Parse.As<string>().At("b"),
+        Parse.As<string>().At("c"));
+      var actionsParser = Applicative.actions<Parse, string>(parsers).As();
+      var actionsInput = JsonNode.Parse("""{"a": "first", "b": "second", "c": "third"}""")!;
+      Assert.Equal(
+        Success<Seq<ParsePathErr>, string>("third"),
+        actionsParser.ParseJsonNode()(actionsInput));
+
     }
 }

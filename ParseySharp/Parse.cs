@@ -98,6 +98,25 @@ public class OptionParse<A>(Parse<A> parser): Parse<Option<A>>
         None: () => Success<Seq<ParsePathErr>, Option<A>>(None))));
 }
 
+public class RecurParse<A, X>(A initial, Func<A, K<Parse, Next<A, X>>> f) : Parse<X>
+{
+  public Func<Unknown<B>, Validation<Seq<ParsePathErr>, X>> Run<B>(ParsePathNav<B> nav) =>
+    input =>
+    {
+      var value = initial;
+      while (true)
+      {
+        var (done, nextVal, result) = f(value).As().Run<B>(nav)(input).Match(
+          Fail: err => (true, default(A)!, Fail<Seq<ParsePathErr>, X>(err)),
+          Succ: next => next.Match(
+            Loop: a => (false, a, default(Validation<Seq<ParsePathErr>, X>)!),
+            Done: x => (true, default(A)!, Success<Seq<ParsePathErr>, X>(x))));
+        if (done) return result;
+        value = nextVal;
+      }
+    };
+}
+
 public static class ParseExtensions
 {
   public static Parse<A> As<A>(this K<Parse, A> pa) =>
@@ -237,4 +256,10 @@ public partial class Parse: Monad<Parse>, Applicative<Parse>
 
   public static Validation<Seq<ParsePathErr>, X> PrefixErrors<X>(Validation<Seq<ParsePathErr>, X> input, Seq<string> pathPrefix) =>
     input.MapFail(err => err.Map(e => e.WithPrefix(pathPrefix)));
+
+  static K<Parse, B> Monad<Parse>.Recur<A, B>(A value, Func<A, K<Parse, Next<A, B>>> f) =>
+    new RecurParse<A, B>(value, f);
+
+  static K<Parse, B> Applicative<Parse>.Apply<A, B>(K<Parse, Func<A, B>> mf, Memo<Parse, A> ma) =>
+    Apply(mf, ma.Value);
 }
