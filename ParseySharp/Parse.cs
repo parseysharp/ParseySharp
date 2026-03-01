@@ -171,7 +171,7 @@ public static class ParseExtensions
 
   public static Func<object, Validation<Seq<ParsePathErr>, A>> ParseObject<A>(this Parse<A> parser) => RunWithNav(parser, ParsePathNav.Object);
 
-  public static Func<object, Validation<Seq<ParsePathErr>, A>> ParseReflect<A>(this Parse<A> parser) => RunWithNav(parser, ParsePathNav.Reflect);
+  public static Func<object, Validation<Seq<ParsePathErr>, A>> ParsePoco<A>(this Parse<A> parser) => RunWithNav(parser, ParsePathNav.Poco);
 
   public static Func<JsonElement, Validation<Seq<ParsePathErr>, A>> ParseJson<A>(this Parse<A> parser) => RunWithNav(parser, ParsePathNav.Json);
 

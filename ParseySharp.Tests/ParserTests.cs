@@ -152,14 +152,14 @@ public class ParserTests
       var result = parser.ParseObject()(objInput);
       Console.WriteLine(result);
 
-      var reflectResult = parser.ParseReflect()(
+      var pocoResult = parser.ParsePoco()(
         Seq(MyEither.Left<string, Option<int>>("hello"),
           MyEither.Left<string, Option<int>>("clarice"),
           MyEither.Right<string, Option<int>>(None),
           MyEither.Left<string, Option<int>>("fortytwo"),
           MyEither.Right<string, Option<int>>(Some(42))));
 
-      Console.WriteLine(reflectResult);
+      Console.WriteLine(pocoResult);
 
       var json = """
         [
@@ -468,7 +468,7 @@ public class ParserTests
       Assert.Equal(result, jsonNodeResult);
       Assert.Equal(result, jsonNetResult);
       Assert.Equal(result, jsonResult);
-      Assert.Equal(result, reflectResult);
+      Assert.Equal(result, pocoResult);
 
       Assert.Equal(
         result,

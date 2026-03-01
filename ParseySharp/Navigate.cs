@@ -345,76 +345,75 @@ public static class ParsePathNav
       CloneNode: x => x
     );
 
+  static readonly System.Collections.Concurrent.ConcurrentDictionary<(Type, string), Func<object, Option<object>>?> _pocoCache = new();
+
+  static Option<object> UnwrapOptionTyped<T>(Option<T> opt) =>
+    opt.Match<Option<object>>(Some: x => Optional<object>(x), None: () => None);
+
+  static Func<object, Option<object>>? BuildGetter(Type type, string name)
+  {
+    const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase;
+
+    var prop = type.GetProperty(name, flags);
+    if (prop is not null && prop.GetIndexParameters().Length > 0) prop = null;
+
+    prop ??= type.GetProperties(BindingFlags.Instance | BindingFlags.Public)
+                 .FirstOrDefault(p =>
+                     p.GetIndexParameters().Length == 0 &&
+                     p.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name == name);
+
+    if (prop is not null)
+      return CompileAccessor(type, prop, prop.PropertyType);
+
+    var field = type.GetField(name, flags);
+    return field is not null ? CompileAccessor(type, field, field.FieldType) : null;
+  }
+
+  static Func<object, Option<object>> CompileAccessor(Type ownerType, MemberInfo member, Type memberType)
+  {
+    var param = System.Linq.Expressions.Expression.Parameter(typeof(object), "obj");
+    var cast = System.Linq.Expressions.Expression.Convert(param, ownerType);
+    System.Linq.Expressions.Expression access = member switch
+    {
+      PropertyInfo p => System.Linq.Expressions.Expression.Property(cast, p),
+      FieldInfo f => System.Linq.Expressions.Expression.Field(cast, f),
+      _ => throw new InvalidOperationException()
+    };
+
+    if (memberType.IsGenericType && memberType.GetGenericTypeDefinition() == typeof(Option<>))
+    {
+      var unwrap = typeof(ParsePathNav)
+        .GetMethod(nameof(UnwrapOptionTyped), BindingFlags.Static | BindingFlags.NonPublic)!
+        .MakeGenericMethod(memberType.GetGenericArguments()[0]);
+      return System.Linq.Expressions.Expression
+        .Lambda<Func<object, Option<object>>>(
+          System.Linq.Expressions.Expression.Call(unwrap, access), param)
+        .Compile();
+    }
+
+    var boxed = System.Linq.Expressions.Expression.Convert(access, typeof(object));
+    var rawGetter = System.Linq.Expressions.Expression
+      .Lambda<Func<object, object?>>(boxed, param)
+      .Compile();
+    return obj => Optional(rawGetter(obj));
+  }
+
   static Either<Unknown<object>, Option<object>> ReflectGet(object node, string name)
   {
-    var t = node.GetType();
-
-    var p = t.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase);
-    if (p is not null && p.GetIndexParameters().Length == 0)
-      return ((Func<object?>)(() => p.GetValue(node))).Try<object, object?>(_ => node).Match(
-        Left: _ => Left<Unknown<object>, Option<object>>(Unknown.New(node)),
-        Right: v => Right<Unknown<object>, Option<object>>(UnwrapOptionToPath(v))
-      );
-
-    var pj = t.GetProperties(BindingFlags.Instance | BindingFlags.Public)
-              .FirstOrDefault(pp =>
-                  pp.GetIndexParameters().Length == 0 &&
-                  pp.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name == name);
-    if (pj is not null)
-      return ((Func<object?>)(() => pj.GetValue(node))).Try<object, object?>(_ => node).Match(
-        Left: _ => Left<Unknown<object>, Option<object>>(Unknown.New(node)),
-        Right: v => Right<Unknown<object>, Option<object>>(UnwrapOptionToPath(v))
-      );
-
-    var f = t.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase);
-    if (f is not null)
-      return ((Func<object?>)(() => f.GetValue(node))).Try<object, object?>(_ => node).Match(
-        Left: _ => Left<Unknown<object>, Option<object>>(Unknown.New(node)),
-        Right: v => Right<Unknown<object>, Option<object>>(UnwrapOptionToPath(v))
-      );
-
-    return Right<Unknown<object>, Option<object>>(None);
-  }
-
-  static Option<object> UnwrapOptionToPath(object? v)
-  {
-    if (v is null) return None;
-    var t = v.GetType();
-    if (t.IsGenericType && t.GetGenericTypeDefinition().FullName == "LanguageExt.Option`1")
+    var getter = _pocoCache.GetOrAdd((node.GetType(), name), key => BuildGetter(key.Item1, key.Item2));
+    if (getter is null)
+      return Right<Unknown<object>, Option<object>>(None);
+    try
     {
-      var attempt = ((Func<Option<object>>)(() =>
-      {
-        var isNone = false; object? inner = null;
-        var ifNone = t.GetMethod("IfNone", [ typeof(Action) ]);
-        var ifSome = t.GetMethod("IfSome", [ typeof(Action<>).MakeGenericType(t.GetGenericArguments()[0]) ]);
-        if (ifNone is null || ifSome is null) return Optional(v); // fallback: keep opaque
-
-        ifNone.Invoke(v, [ (Action)(() => isNone = true) ]);
-        if (isNone) return None;
-
-        var param = System.Linq.Expressions.Expression.Parameter(t.GetGenericArguments()[0], "x");
-        var body  = System.Linq.Expressions.Expression.Call(
-                      System.Linq.Expressions.Expression.Constant(new Action<object?>(o => inner = o)),
-                      nameof(Action<object?>.Invoke),
-                      null,
-                      System.Linq.Expressions.Expression.Convert(param, typeof(object))
-                    );
-        var del = System.Linq.Expressions.Expression.Lambda(
-                    typeof(Action<>).MakeGenericType(t.GetGenericArguments()[0]), body, param).Compile();
-
-        ifSome.Invoke(v, [ del ]);
-        return Optional(inner);
-      })).Try<Option<object>, Option<object>>(_ => Optional(v));
-
-      return attempt.Match(
-        Left: opt => opt,
-        Right: opt => opt
-      );
+      return Right<Unknown<object>, Option<object>>(getter(node));
     }
-    return Optional(v);
+    catch
+    {
+      return Left<Unknown<object>, Option<object>>(Unknown.New(node));
+    }
   }
 
-  public static readonly ParsePathNav<object> Reflect =
+  public static readonly ParsePathNav<object> Poco =
     ParsePathNav<object>.Create(
       Prop: ReflectGet,
       Index: Object.Index,
