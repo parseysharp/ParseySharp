@@ -212,7 +212,9 @@ public static class ParsePathNav
   ParsePathNav<JsonElement>.Create(
       Prop: (je, name) =>
         je.ValueKind == JsonValueKind.Object
-          ? Right<Unknown<JsonElement>, Option<JsonElement>>(Optional(je.TryGetProperty(name, out var v) ? v : default))
+          ? (je.TryGetProperty(name, out var v)
+              ? Right<Unknown<JsonElement>, Option<JsonElement>>(Some(v))
+              : Right<Unknown<JsonElement>, Option<JsonElement>>(None))
           : Left<Unknown<JsonElement>, Option<JsonElement>>(Unknown.New(je)),
 
       Index: (je, i) =>

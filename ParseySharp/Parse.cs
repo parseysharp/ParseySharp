@@ -98,6 +98,24 @@ public class OptionParse<A>(Parse<A> parser): Parse<Option<A>>
         None: () => Success<Seq<ParsePathErr>, Option<A>>(None))));
 }
 
+public class ClearableParse<A>(Parse<A> parser) : Parse<Clearable<A>>
+{
+  // Distinguishes three cases based on what Navigate delivers:
+  //   Unknown.None        → key was absent in the source → Unchanged
+  //   Unknown.Value(node) → key existed; Unbox to check its content:
+  //     Unbox → Unknown.None  → value was explicit null → Cleared
+  //     Unbox → Unknown.Value → real value, run inner parser → Set(v)
+  public Func<Unknown<B>, Validation<Seq<ParsePathErr>, Clearable<A>>> Run<B>(ParsePathNav<B> nav) =>
+    input => input.Match(
+      None: () => Success<Seq<ParsePathErr>, Clearable<A>>(new Clearable<A>.Unchanged()),
+      Some: i => nav.Unbox(i).Match(
+        Left: l => Fail<Seq<ParsePathErr>, Clearable<A>>(
+          [ParsePathErr.FromParseErr(new ParseErr("Could not unbox value", typeof(A).Name, l), [])]),
+        Right: x => x.Match(
+          Some: _ => parser.Run<B>(nav)(input).Map(v => (Clearable<A>)new Clearable<A>.Set(v)),
+          None: () => Success<Seq<ParsePathErr>, Clearable<A>>(new Clearable<A>.Cleared()))));
+}
+
 public class RecurParse<A, X>(A initial, Func<A, K<Parse, Next<A, X>>> f) : Parse<X>
 {
   public Func<Unknown<B>, Validation<Seq<ParsePathErr>, X>> Run<B>(ParsePathNav<B> nav) =>
@@ -124,6 +142,9 @@ public static class ParseExtensions
 
   public static Parse<Option<A>> Option<A>(this Parse<A> parser) =>
     new OptionParse<A>(parser);
+
+  public static Parse<Clearable<A>> Clearable<A>(this Parse<A> parser) =>
+    new ClearableParse<A>(parser);
 
   public static Parse<B> Filter<A, B>(this Parse<A> parser, Func<A, Validation<Seq<ParsePathErr>, B>> f) =>
     new FilterParse<A, B>(parser, f);
