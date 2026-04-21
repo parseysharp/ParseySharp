@@ -14,10 +14,16 @@ public abstract record Clearable<T>
     public sealed record Unchanged() : Clearable<T>;
     public sealed record Cleared() : Clearable<T>;
     public sealed record Set(T Value) : Clearable<T>;
+
+    
 }
 
 public static class Clearable
 {
+    public static Clearable<T> Unchanged<T>() => new Clearable<T>.Unchanged();
+    public static Clearable<T> Cleared<T>() => new Clearable<T>.Cleared();
+    public static Clearable<T> Set<T>(T value) => new Clearable<T>.Set(value);
+
     public static U Match<T, U>(
       this Clearable<T> clearable,
       Func<U> Unchanged,
@@ -32,24 +38,22 @@ public static class Clearable
     };
 
     public static Clearable<U> Map<T, U>(this Clearable<T> clearable, Func<T, U> f) =>
-      clearable switch
-      {
-          Clearable<T>.Unchanged => new Clearable<U>.Unchanged(),
-          Clearable<T>.Cleared => new Clearable<U>.Cleared(),
-          Clearable<T>.Set s => new Clearable<U>.Set(f(s.Value)),
-          _ => throw new InvalidOperationException("Unreachable Clearable branch")
-      };
+      clearable.Match(
+        Unchanged: Clearable.Unchanged<U>,
+        Cleared: Clearable.Cleared<U>,
+        Set: v => Clearable.Set(f(v))
+      );
 
     public static Option<T> ToOption<T>(this Clearable<T> clearable) =>
-      clearable switch
-      {
-          Clearable<T>.Set s => Some(s.Value),
-          _ => None
-      };
+      clearable.Match(
+        Unchanged: () => None,
+        Cleared: () => None,
+        Set: v => Some(v)
+      );
 
     public static Clearable<T> FromOption<T>(Option<T> option) =>
       option.Match(
-        Some: v => (Clearable<T>)new Clearable<T>.Set(v),
-        None: () => new Clearable<T>.Unchanged()
+        Some: Clearable.Set,
+        None: Clearable.Unchanged<T>
       );
 }

@@ -107,13 +107,13 @@ public class ClearableParse<A>(Parse<A> parser) : Parse<Clearable<A>>
   //     Unbox → Unknown.Value → real value, run inner parser → Set(v)
   public Func<Unknown<B>, Validation<Seq<ParsePathErr>, Clearable<A>>> Run<B>(ParsePathNav<B> nav) =>
     input => input.Match(
-      None: () => Success<Seq<ParsePathErr>, Clearable<A>>(new Clearable<A>.Unchanged()),
+      None: () => Success<Seq<ParsePathErr>, Clearable<A>>(Clearable.Unchanged<A>()),
       Some: i => nav.Unbox(i).Match(
         Left: l => Fail<Seq<ParsePathErr>, Clearable<A>>(
           [ParsePathErr.FromParseErr(new ParseErr("Could not unbox value", typeof(A).Name, l), [])]),
         Right: x => x.Match(
-          Some: _ => parser.Run<B>(nav)(input).Map(v => (Clearable<A>)new Clearable<A>.Set(v)),
-          None: () => Success<Seq<ParsePathErr>, Clearable<A>>(new Clearable<A>.Cleared()))));
+          Some: _ => parser.Run<B>(nav)(input).Map(Clearable.Set),
+          None: () => Success<Seq<ParsePathErr>, Clearable<A>>(Clearable.Cleared<A>()))));
 }
 
 public class RecurParse<A, X>(A initial, Func<A, K<Parse, Next<A, X>>> f) : Parse<X>
