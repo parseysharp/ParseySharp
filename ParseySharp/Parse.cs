@@ -98,6 +98,8 @@ public class OptionParse<A>(Parse<A> parser) : Parse<Option<A>>
         None: () => Success<Seq<ParsePathErr>, Option<A>>(None))));
 }
 
+public sealed record Unset();
+
 public class RecurParse<A, X>(A initial, Func<A, K<Parse, Next<A, X>>> f) : Parse<X>
 {
   public Func<Unknown<B>, Validation<Seq<ParsePathErr>, X>> Run<B>(ParsePathNav<B> nav) =>
@@ -124,6 +126,13 @@ public static class ParseExtensions
 
   public static Parse<Option<A>> Option<A>(this Parse<A> parser) =>
     new OptionParse<A>(parser);
+
+  public static Parse<Option<Either<Unset, A>>> Patch<A>(this Parse<A> parser) =>
+    Parse.UnsetParser()
+      .Map(Left<Unset, A>).As()
+      .OrElse(parser.Map(Right<Unset, A>).As())
+      .Option()
+      .As();
 
   public static Parse<B> Filter<A, B>(this Parse<A> parser, Func<A, Validation<Seq<ParsePathErr>, B>> f) =>
     new FilterParse<A, B>(parser, f);
@@ -228,6 +237,12 @@ public partial class Parse : Monad<Parse>, Applicative<Parse>
     new ApplyParse<Func<A, B>, A, B>(pf.As(), pa.As(), (f, a) => f(a));
 
   public static K<Parse, A> Pure<A>(A a) => new PureParse<A>(a);
+
+  public static Parse<Unset> UnsetParser() =>
+    As<bool>().At("PATCH_UNSET")
+      .Filter(v => v ? None : Some("PATCH_UNSET must be true"))
+      .Map(_ => new Unset())
+      .As();
 
   public static Validation<Seq<ParsePathErr>, object> NotNull<A>(Unknown<object> input) =>
     input.Match(

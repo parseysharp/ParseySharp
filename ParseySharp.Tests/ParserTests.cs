@@ -492,4 +492,34 @@ public class ParserTests
         actionsParser.ParseJsonNode()(actionsInput));
 
     }
+
+  [Fact]
+  public void Parses_Patch_Three_States()
+  {
+    var parser = Parse.As<string>().Patch().At("nickname");
+
+    // 1) PATCH_UNSET sentinel → Some(Left(Unset))  ("erase this field")
+    var unsetJson = """{"nickname": {"PATCH_UNSET": true}}""";
+    Assert.Equal(
+      Success<Seq<ParsePathErr>, Option<Either<Unset, string>>>(
+        Some(Left<Unset, string>(new Unset()))),
+      parser.ParseJson()(JsonDocument.Parse(unsetJson).RootElement));
+
+    // 2) Plain value → Some(Right(value))  ("set this field")
+    var valueJson = """{"nickname": "Alice"}""";
+    Assert.Equal(
+      Success<Seq<ParsePathErr>, Option<Either<Unset, string>>>(
+        Some(Right<Unset, string>("Alice"))),
+      parser.ParseJson()(JsonDocument.Parse(valueJson).RootElement));
+
+    // 3) Field absent → None  ("don't touch this field")
+    var missingJson = """{}""";
+    Assert.Equal(
+      Success<Seq<ParsePathErr>, Option<Either<Unset, string>>>(None),
+      parser.ParseJson()(JsonDocument.Parse(missingJson).RootElement));
+
+    // 4) PATCH_UNSET=false → falls back to value parser, which fails on the object → overall failure
+    var unsetFalseJson = """{"nickname": {"PATCH_UNSET": false}}""";
+    Assert.True(parser.ParseJson()(JsonDocument.Parse(unsetFalseJson).RootElement).IsFail);
+  }
 }
