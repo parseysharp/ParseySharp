@@ -6,49 +6,49 @@ using System.Text.Json.Nodes;
 using System.Data;
 
 #pragma warning disable IDE1006 // Naming Styles
-public interface Parse<A>: K<Parse, A>
+public interface Parse<A> : K<Parse, A>
 {
   public abstract Func<Unknown<B>, Validation<Seq<ParsePathErr>, A>> Run<B>(ParsePathNav<B> nav);
 }
 #pragma warning restore IDE1006 // Naming Styles
 
-public class FilterParse<A, X>(Parse<A> pa, Func<A, Validation<Seq<ParsePathErr>, X>> f): Parse<X>
+public class FilterParse<A, X>(Parse<A> pa, Func<A, Validation<Seq<ParsePathErr>, X>> f) : Parse<X>
 {
   public Func<Unknown<B>, Validation<Seq<ParsePathErr>, X>> Run<B>(ParsePathNav<B> nav) =>
     input => pa.Run<B>(nav)(input).Bind(x => f(x));
 }
 
-public class FailParse<A>(Seq<ParsePathErr> errors): Parse<A>
+public class FailParse<A>(Seq<ParsePathErr> errors) : Parse<A>
 {
   public Func<Unknown<B>, Validation<Seq<ParsePathErr>, A>> Run<B>(ParsePathNav<B> nav) =>
     input => Fail<Seq<ParsePathErr>, A>(errors);
 }
 
-public class BindParse<A, X>(Parse<A> pa, Func<A, Parse<X>> f): Parse<X>
+public class BindParse<A, X>(Parse<A> pa, Func<A, Parse<X>> f) : Parse<X>
 {
   public Func<Unknown<B>, Validation<Seq<ParsePathErr>, X>> Run<B>(ParsePathNav<B> nav) =>
     input => pa.Run<B>(nav)(input).Bind(x => f(x).Run<B>(nav)(input));
 }
 
-public class MapParse<A, X>(Parse<A> pa, Func<A, X> f): Parse<X>
+public class MapParse<A, X>(Parse<A> pa, Func<A, X> f) : Parse<X>
 {
   public Func<Unknown<B>, Validation<Seq<ParsePathErr>, X>> Run<B>(ParsePathNav<B> nav) =>
     input => pa.Run<B>(nav)(input).Map(f);
 }
 
-public class ApplyParse<A, B, C>(Parse<A> pa, Parse<B> pb, Func<A, B, C> f): Parse<C>
+public class ApplyParse<A, B, C>(Parse<A> pa, Parse<B> pb, Func<A, B, C> f) : Parse<C>
 {
   public Func<Unknown<X>, Validation<Seq<ParsePathErr>, C>> Run<X>(ParsePathNav<X> nav) =>
     input => (pa.Run<X>(nav)(input), pb.Run<X>(nav)(input)).Apply(f).As();
 }
 
-public class PureParse<A>(A value): Parse<A>
+public class PureParse<A>(A value) : Parse<A>
 {
   public Func<Unknown<B>, Validation<Seq<ParsePathErr>, A>> Run<B>(ParsePathNav<B> nav) =>
     input => Success<Seq<ParsePathErr>, A>(value);
 }
 
-public class ValueParse<A>(Func<Unknown<object>, Validation<Seq<ParsePathErr>, A>> run): Parse<A>
+public class ValueParse<A>(Func<Unknown<object>, Validation<Seq<ParsePathErr>, A>> run) : Parse<A>
 {
   public Func<Unknown<B>, Validation<Seq<ParsePathErr>, A>> Run<B>(ParsePathNav<B> nav) =>
     input => input.Match(
@@ -60,7 +60,7 @@ public class ValueParse<A>(Func<Unknown<object>, Validation<Seq<ParsePathErr>, A
     );
 }
 
-public class OrElseParse<A>(Parse<A> p1, Parse<A> p2): Parse<A>
+public class OrElseParse<A>(Parse<A> p1, Parse<A> p2) : Parse<A>
 {
   public Func<Unknown<B>, Validation<Seq<ParsePathErr>, A>> Run<B>(ParsePathNav<B> nav) =>
     input => p1.Run<B>(nav)(input).Match(
@@ -69,16 +69,16 @@ public class OrElseParse<A>(Parse<A> p1, Parse<A> p2): Parse<A>
     );
 }
 
-public class PathParse<A>(string Name, ListZipper<PathSeg> Path, Parse<A> parser): Parse<A>
+public class PathParse<A>(string Name, ListZipper<PathSeg> Path, Parse<A> parser) : Parse<A>
 {
   public Func<Unknown<B>, Validation<Seq<ParsePathErr>, A>> Run<B>(ParsePathNav<B> nav) =>
-    input => PathParser.Navigate(nav, Path, Name, input).Bind(x => 
+    input => PathParser.Navigate(nav, Path, Name, input).Bind(x =>
       Parse.PrefixErrors(
         parser.Run<B>(nav)(x),
         PathSegRender.ToStrings(Path.ToSeq())));
 }
 
-public class SeqParse<A>(Parse<A> parser): Parse<Seq<A>>
+public class SeqParse<A>(Parse<A> parser) : Parse<Seq<A>>
 {
   public Func<Unknown<B>, Validation<Seq<ParsePathErr>, Seq<A>>> Run<B>(ParsePathNav<B> nav) =>
     input => Parse.Seq<B>().Run<B>(nav)(input)
@@ -86,7 +86,7 @@ public class SeqParse<A>(Parse<A> parser): Parse<Seq<A>>
         t => Parse.PrefixErrors(parser.Run(nav)(Unknown.New(t.First)), [$"[{t.Second}]"])));
 }
 
-public class OptionParse<A>(Parse<A> parser): Parse<Option<A>>
+public class OptionParse<A>(Parse<A> parser) : Parse<Option<A>>
 {
   public Func<Unknown<B>, Validation<Seq<ParsePathErr>, Option<A>>> Run<B>(ParsePathNav<B> nav) =>
     input => input.Match(
@@ -96,24 +96,6 @@ public class OptionParse<A>(Parse<A> parser): Parse<Option<A>>
        Right: x => x.Match(
         Some: x => parser.Run<B>(nav)(input).Map(Optional),
         None: () => Success<Seq<ParsePathErr>, Option<A>>(None))));
-}
-
-public class ClearableParse<A>(Parse<A> parser) : Parse<Clearable<A>>
-{
-  // Distinguishes three cases based on what Navigate delivers:
-  //   Unknown.None        → key was absent in the source → Unchanged
-  //   Unknown.Value(node) → key existed; Unbox to check its content:
-  //     Unbox → Unknown.None  → value was explicit null → Cleared
-  //     Unbox → Unknown.Value → real value, run inner parser → Set(v)
-  public Func<Unknown<B>, Validation<Seq<ParsePathErr>, Clearable<A>>> Run<B>(ParsePathNav<B> nav) =>
-    input => input.Match(
-      None: () => Success<Seq<ParsePathErr>, Clearable<A>>(Clearable.Unchanged<A>()),
-      Some: i => nav.Unbox(i).Match(
-        Left: l => Fail<Seq<ParsePathErr>, Clearable<A>>(
-          [ParsePathErr.FromParseErr(new ParseErr("Could not unbox value", typeof(A).Name, l), [])]),
-        Right: x => x.Match(
-          Some: _ => parser.Run<B>(nav)(input).Map(Clearable.Set),
-          None: () => Success<Seq<ParsePathErr>, Clearable<A>>(Clearable.Cleared<A>()))));
 }
 
 public class RecurParse<A, X>(A initial, Func<A, K<Parse, Next<A, X>>> f) : Parse<X>
@@ -142,9 +124,6 @@ public static class ParseExtensions
 
   public static Parse<Option<A>> Option<A>(this Parse<A> parser) =>
     new OptionParse<A>(parser);
-
-  public static Parse<Clearable<A>> Clearable<A>(this Parse<A> parser) =>
-    new ClearableParse<A>(parser);
 
   public static Parse<B> Filter<A, B>(this Parse<A> parser, Func<A, Validation<Seq<ParsePathErr>, B>> f) =>
     new FilterParse<A, B>(parser, f);
@@ -237,7 +216,7 @@ public static class ParseExtensions
     input => parser.Run<B>(nav)(Unknown.New(input));
 }
 
-public partial class Parse: Monad<Parse>, Applicative<Parse>
+public partial class Parse : Monad<Parse>, Applicative<Parse>
 {
   public static K<Parse, B> Bind<A, B>(K<Parse, A> pa, Func<A, K<Parse, B>> f) =>
     new BindParse<A, B>(pa.As(), x => f(x).As());

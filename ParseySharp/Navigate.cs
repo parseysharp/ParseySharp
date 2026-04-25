@@ -212,9 +212,7 @@ public static class ParsePathNav
   ParsePathNav<JsonElement>.Create(
       Prop: (je, name) =>
         je.ValueKind == JsonValueKind.Object
-          ? (je.TryGetProperty(name, out var v)
-              ? Right<Unknown<JsonElement>, Option<JsonElement>>(Some(v))
-              : Right<Unknown<JsonElement>, Option<JsonElement>>(None))
+          ? Right<Unknown<JsonElement>, Option<JsonElement>>(Optional(je.TryGetProperty(name, out var v) ? v : default))
           : Left<Unknown<JsonElement>, Option<JsonElement>>(Unknown.New(je)),
 
       Index: (je, i) =>
@@ -269,10 +267,10 @@ public static class ParsePathNav
           JsonArray arr => Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(arr)),
           JsonObject => Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(jn)),
           JsonValue v =>
-            v.TryGetValue<int>(out var iv)    ? Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(iv)) :
-            v.TryGetValue<long>(out var lv)   ? Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(lv)) :
+            v.TryGetValue<int>(out var iv) ? Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(iv)) :
+            v.TryGetValue<long>(out var lv) ? Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(lv)) :
             v.TryGetValue<double>(out var dv) ? Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(dv)) :
-            v.TryGetValue<bool>(out var bv)   ? Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(bv)) :
+            v.TryGetValue<bool>(out var bv) ? Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(bv)) :
             v.TryGetValue<string>(out var sv) ? Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(sv))
                                               : Right<Unknown<JsonNode>, Unknown<object>>(Unknown.UnsafeFromOption<object>(None)),
           _ => Left<Unknown<JsonNode>, Unknown<object>>(Unknown.New(jn))
@@ -325,7 +323,7 @@ public static class ParsePathNav
           IReadOnlyDictionary<string, object?> rd => Right<Unknown<object>, Option<object>>(Optional(rd.TryGetValue(name, out var v1) ? v1 : null)),
           IDictionary<string, object?> d => Right<Unknown<object>, Option<object>>(Optional(d.TryGetValue(name, out var v2) ? v2 : null)),
           System.Collections.IDictionary legacy => Right<Unknown<object>, Option<object>>(Optional(legacy.Contains(name) ? legacy[name] : null)),
-          _ => Left<Unknown<object>, Option<object>>(Unknown.New(node)) 
+          _ => Left<Unknown<object>, Option<object>>(Unknown.New(node))
         },
 
       Index: (node, i) =>
