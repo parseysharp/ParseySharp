@@ -11,6 +11,7 @@ using Avro;
 using Avro.Generic;
 using Amazon.DynamoDBv2.Model;
 using Microsoft.Extensions.Configuration;
+using HotChocolate.Language;
 
 namespace ParseySharp.Tests;
 
@@ -239,6 +240,27 @@ public class ParserTests
       var jsonNetResult = parser.ParseNewtonsoftJson()(jarr);
 
       Console.WriteLine(jsonNetResult);
+
+      var hcNode = new ListValueNode(
+        new ObjectValueNode(
+          new ObjectFieldNode("kind", new StringValueNode("left")),
+          new ObjectFieldNode("left", new StringValueNode("hello"))),
+        new ObjectValueNode(
+          new ObjectFieldNode("kind", new StringValueNode("left")),
+          new ObjectFieldNode("left", new StringValueNode("clarice"))),
+        new ObjectValueNode(
+          new ObjectFieldNode("kind", new StringValueNode("right")),
+          new ObjectFieldNode("right", NullValueNode.Default)),
+        new ObjectValueNode(
+          new ObjectFieldNode("kind", new StringValueNode("left")),
+          new ObjectFieldNode("left", new StringValueNode("fortytwo"))),
+        new ObjectValueNode(
+          new ObjectFieldNode("kind", new StringValueNode("right")),
+          new ObjectFieldNode("right", new IntValueNode(42))));
+
+      var hcResult = parser.ParseHotChocolate()(hcNode);
+
+      Console.WriteLine(hcResult);
 
       var pb = new ListValue
       {
@@ -469,6 +491,7 @@ public class ParserTests
       Assert.Equal(result, jsonNetResult);
       Assert.Equal(result, jsonResult);
       Assert.Equal(result, pocoResult);
+      Assert.Equal(result, hcResult);
 
       Assert.Equal(
         result,

@@ -16,6 +16,7 @@
     <PackageReference Include="AWSSDK.DynamoDBv2" Version="4.0.6.3" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
+    <PackageReference Include="OneOf" Version="3.0.271" />
   </ItemGroup>
 
   <ItemGroup>
@@ -31,6 +32,7 @@
     <ProjectReference Include="..\ParseySharp.Avro\ParseySharp.Avro.csproj" />
     <ProjectReference Include="..\ParseySharp.DynamoDb\ParseySharp.DynamoDb.csproj" />
     <ProjectReference Include="..\ParseySharp.Config\ParseySharp.Config.csproj" />
+    <ProjectReference Include="..\ParseySharp.HotChocolate\ParseySharp.HotChocolate.csproj" />
   </ItemGroup>
 
 </Project>

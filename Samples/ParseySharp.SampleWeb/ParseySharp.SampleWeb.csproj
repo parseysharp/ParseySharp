@@ -9,10 +9,13 @@
     <PackageReference Include="LanguageExt.Core" Version="5.0.0-beta-77" />
     <PackageReference Include="LanguageExt.Streaming" Version="5.0.0-beta-77" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.0.1" />
+    <PackageReference Include="HotChocolate.AspNetCore" Version="16.0.0-rc.1.40" />
+    <PackageReference Include="OneOf" Version="3.0.271" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\ParseySharp\ParseySharp.csproj" />
     <ProjectReference Include="..\..\ParseySharp.AspNetCore\ParseySharp.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\ParseySharp.HotChocolate\ParseySharp.HotChocolate.csproj" />
     <ProjectReference Include="..\..\ParseySharp.Protobuf.AspNetCore\ParseySharp.Protobuf.AspNetCore.csproj" />
     <ProjectReference Include="..\..\ParseySharp.MessagePack.AspNetCore\ParseySharp.MessagePack.AspNetCore.csproj" />
     <ProjectReference Include="..\..\ParseySharp.Yaml.AspNetCore\ParseySharp.Yaml.AspNetCore.csproj" />

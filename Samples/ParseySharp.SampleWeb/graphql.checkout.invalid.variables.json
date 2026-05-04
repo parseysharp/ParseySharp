@@ -1,0 +1,15 @@
+{
+  "input": {
+    "customerEmail": "not-an-email",
+    "paymentMethod": {
+      "type": "CARD",
+      "number": "0000",
+      "cvv": 1
+    },
+    "items": [
+      { "sku": "",         "quantity": 0, "unitPrice": 0    },
+      { "sku": "WIDGET-1", "quantity": 2, "unitPrice": 9.99 }
+    ],
+    "shippingAddress": null
+  }
+}

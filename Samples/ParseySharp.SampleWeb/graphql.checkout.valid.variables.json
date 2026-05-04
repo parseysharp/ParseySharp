@@ -1,0 +1,15 @@
+{
+  "input": {
+    "customerEmail": "buyer@example.com",
+    "paymentMethod": {
+      "type": "CARD",
+      "number": "4111111111111111",
+      "cvv": 123
+    },
+    "items": [
+      { "sku": "WIDGET-1", "quantity": 2, "unitPrice": 10.50 },
+      { "sku": "WIDGET-2", "quantity": 1, "unitPrice": 29.99 }
+    ],
+    "shippingAddress": null
+  }
+}

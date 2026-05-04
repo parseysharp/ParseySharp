@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using ParseySharp.AspNetCore;
 using ParseySharp.SampleWeb;
+using ParseySharp.SampleWeb.GraphQL;
 using ParseySharp.Swashbuckle;
 using ParseySharp.Refine;
 using ParseySharp;
@@ -23,6 +24,13 @@ builder.Services
 builder.Services
   .AddControllers()
   .AddParseySharpMvc();
+
+// Hot Chocolate GraphQL server with ParseySharp integration
+builder.Services
+  .AddGraphQLServer()
+  .AddParseySharpHotChocolate()
+  .AddQueryType<QueryType>()
+  .AddMutationType<MutationType>();
 
 // Parse Seq<ValidCheckout> from configuration section "checkoutSeed" into options
 builder.Services
@@ -51,6 +59,9 @@ app.UseSwaggerUI();
 
 // Map MVC controllers
 app.MapControllers();
+
+// GraphQL endpoint (Nitro/Banana Cake Pop UI + /graphql POST)
+app.MapGraphQL("/graphql");
 
 var seed = app.Services.GetRequiredService<IOptions<ParsedOpts<Seq<ValidCheckout>>>>();
 

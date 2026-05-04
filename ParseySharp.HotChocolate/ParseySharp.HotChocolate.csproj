@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageId>ParseySharp.HotChocolate</PackageId>
+    <Description>Hot Chocolate integration for ParseySharp: parse GraphQL field arguments with accumulated, path-aware errors surfaced through Hot Chocolate's native error channel.</Description>
+    <PackageTags>$(PackageTags);hotchocolate;graphql</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="HotChocolate.Types" Version="16.0.0-rc.1.40" />
+    <PackageReference Include="OneOf" Version="3.0.271" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ParseySharp\ParseySharp.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ParseySharp.Tests" />
+  </ItemGroup>
+</Project>
