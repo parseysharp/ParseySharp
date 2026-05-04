@@ -1,0 +1,27 @@
+mutation Checkout($input: CheckoutInput!) {
+  checkout(input: $input) {
+    value {
+      __typename
+      ... on CheckoutSuccess {
+        paymentMethodKind
+        itemsCount
+        amount
+      }
+      ... on ValidationError {
+        issues {
+          path
+          message
+          expected
+          actual
+        }
+      }
+      ... on NotFoundError {
+        resource
+        id
+      }
+      ... on ConflictError {
+        reason
+      }
+    }
+  }
+}

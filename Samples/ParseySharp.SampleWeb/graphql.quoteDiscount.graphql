@@ -1,0 +1,10 @@
+query QuoteDiscount {
+  percent: quoteDiscount(input: { value: { percentDiscount: { percent: 7 } } })
+  fixed:   quoteDiscount(input: { value: { fixedDiscount: { amount: 25 } } })
+  seasonalPercent: quoteDiscount(
+    input: { value: { seasonalDiscount: { value: { percentDiscount: { percent: 3 } } } } }
+  )
+  seasonalFixed: quoteDiscount(
+    input: { value: { seasonalDiscount: { value: { fixedDiscount: { amount: 12 } } } } }
+  )
+}
