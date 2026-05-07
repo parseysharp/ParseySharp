@@ -1,4 +1,3 @@
-using System.Linq;
 using Microsoft.Extensions.Configuration;
 
 namespace ParseySharp.Config;
@@ -12,9 +11,15 @@ public static class ParsePathNavConfig
           Optional(section)
             .Bind(x => Optional(x.GetSection(name)))
             .Filter(SectionExists)
+            .Match(
+              Some: s => NavStep.Value<IConfigurationSection>(s),
+              None: () => NavStep.Absent<IConfigurationSection>())
         )
         .ToEither()
-        .MapLeft(_ => Unknown.New(section)),
+        .Match(
+          Left: _ => NavStep.NotApplicable(section),
+          Right: r => r
+        ),
 
       Index: (section, i) =>
         Try.lift(() =>
@@ -22,24 +27,35 @@ public static class ParsePathNavConfig
             .Filter(_ => i >= 0)
             .Bind(x => Optional(x.GetSection(i.ToString())))
             .Filter(SectionExists)
+            .Match(
+              Some: s => NavStep.Value<IConfigurationSection>(s),
+              None: () => NavStep.Absent<IConfigurationSection>())
         )
         .ToEither()
-        .MapLeft(_ => Unknown.New(section)),
+        .Match(
+          Left: _ => NavStep.NotApplicable(section),
+          Right: r => r
+        ),
 
       Unbox: section =>
         Try.lift(() =>
-          Unknown.UnsafeFromOption<object>(
-            Optional(section)
-              .Filter(_ => _.GetChildren().Any())
-              .Map<object>(x => 
-                IsArraySection(x)
-                  ? OrderByIndex(x.GetChildren())
-                  : x) |
-            Optional(section.Value).Filter(v => 
-              !string.IsNullOrWhiteSpace(v))
-              .Map<object>(v => v)))
+          (Optional(section)
+            .Filter(_ => _.GetChildren().Any())
+            .Map<object>(x =>
+              IsArraySection(x)
+                ? OrderByIndex(x.GetChildren())
+                : x) |
+          Optional(section.Value).Filter(v =>
+            !string.IsNullOrWhiteSpace(v))
+            .Map<object>(v => v))
+            .Match(
+              Some: v => UnboxStep.Value(v),
+              None: () => UnboxStep.Null()))
         .ToEither()
-        .MapLeft(_ => Unknown.New(section)),
+        .Match(
+          Left: _ => UnboxStep.NotApplicable(section),
+          Right: r => r
+        ),
 
       CloneNode: s => s
     );

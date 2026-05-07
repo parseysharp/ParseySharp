@@ -13,9 +13,11 @@ public static class ParsePathNavAvro
         {
           GenericRecord rec =>
             (rec.Schema is RecordSchema rs && rs.Fields.Any(f => string.Equals(f.Name, name, StringComparison.Ordinal)))
-              ? Right<Unknown<object>, Option<object>>(Optional(rec[name]))
-              : Right<Unknown<object>, Option<object>>(None),
-          _ => Left<Unknown<object>, Option<object>>(Unknown.New(node))
+              ? Optional(rec[name]).Match(
+                  Some: c => NavStep.Value<object>(c),
+                  None: () => NavStep.Null<object>())
+              : NavStep.Absent<object>(),
+          _ => NavStep.NotApplicable(node)
         },
 
       Index: (node, i) =>
@@ -23,31 +25,35 @@ public static class ParsePathNavAvro
         {
           System.Collections.IList list when i >= 0 =>
             (i < list.Count)
-              ? Right<Unknown<object>, Option<object>>(Optional(list[i]))
-              : Right<Unknown<object>, Option<object>>(None),
+              ? Optional(list[i]).Match(
+                  Some: c => NavStep.Value<object>(c),
+                  None: () => NavStep.Null<object>())
+              : NavStep.Absent<object>(),
           IEnumerable<object?> seq when node is not string && i >= 0 =>
             ((Func<Seq<object?>>)(() => Seq(seq)))
               .Try<object, Seq<object?>>(_ => node)
               .Match(
-                Left: _ => Left<Unknown<object>, Option<object>>(Unknown.New(node)),
+                Left: _ => NavStep.NotApplicable(node),
                 Right: xs => (i < xs.Count)
-                  ? Right<Unknown<object>, Option<object>>(Optional(xs[i]))
-                  : Right<Unknown<object>, Option<object>>(None)
+                  ? Optional(xs[i]).Match(
+                      Some: c => NavStep.Value<object>(c),
+                      None: () => NavStep.Null<object>())
+                  : NavStep.Absent<object>()
               ),
-          _ => Left<Unknown<object>, Option<object>>(Unknown.New(node))
+          _ => NavStep.NotApplicable(node)
         },
 
       Unbox: node => node switch
       {
-        null => Right<Unknown<object>, Unknown<object>>(new Unknown<object>.None()),
-        string s => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(s)),
-        bool b => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(b)),
-        int i => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(i)),
-        long l => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(l)),
-        float f => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>((double)f)),
-        double d => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(d)),
+        null => UnboxStep.Null(),
+        string s => UnboxStep.Value(s),
+        bool b => UnboxStep.Value(b),
+        int i => UnboxStep.Value(i),
+        long l => UnboxStep.Value(l),
+        float f => UnboxStep.Value((double)f),
+        double d => UnboxStep.Value(d),
         // Handle Avro decimal logical type when decoded as System.Decimal
-        decimal m => ((Func<Unknown<object>>)(() =>
+        decimal m => ((Func<UnboxStep>)(() =>
         {
           // If integral, coerce to the narrowest integer type that fits; else surface as double
           if (decimal.Truncate(m) == m)
@@ -55,47 +61,47 @@ public static class ParsePathNavAvro
             try
             {
               if (m <= int.MaxValue && m >= int.MinValue)
-                return Unknown.New<object>((int)m);
+                return UnboxStep.Value((int)m);
             }
             catch {}
             try
             {
               if (m <= long.MaxValue && m >= long.MinValue)
-                return Unknown.New<object>((long)m);
+                return UnboxStep.Value((long)m);
             }
             catch {}
           }
-          return Unknown.New<object>((double)m);
+          return UnboxStep.Value((double)m);
         }))
-        .Try<object, Unknown<object>>(_ => node)
+        .Try<UnboxStep, UnboxStep>(_ => UnboxStep.NotApplicable(node))
         .Match(
-          Left: _ => Left<Unknown<object>, Unknown<object>>(Unknown.New(node)),
-          Right: v => Right<Unknown<object>, Unknown<object>>(v)
+          Left: na => na,
+          Right: v => v
         ),
         // Handle Avro.Util.AvroDecimal
-        AvroDecimal am => ((Func<Unknown<object>>)(() =>
+        AvroDecimal am => ((Func<UnboxStep>)(() =>
         {
           var m = AvroDecimal.ToDecimal(am);
           if (decimal.Truncate(m) == m)
           {
-            try { if (m <= int.MaxValue && m >= int.MinValue) return Unknown.New<object>((int)m); } catch {}
-            try { if (m <= long.MaxValue && m >= long.MinValue) return Unknown.New<object>((long)m); } catch {}
+            try { if (m <= int.MaxValue && m >= int.MinValue) return UnboxStep.Value((int)m); } catch {}
+            try { if (m <= long.MaxValue && m >= long.MinValue) return UnboxStep.Value((long)m); } catch {}
           }
-          return Unknown.New<object>((double)m);
+          return UnboxStep.Value((double)m);
         }))
-        .Try<object, Unknown<object>>(_ => node)
+        .Try<UnboxStep, UnboxStep>(_ => UnboxStep.NotApplicable(node))
         .Match(
-          Left: _ => Left<Unknown<object>, Unknown<object>>(Unknown.New(node)),
-          Right: v => Right<Unknown<object>, Unknown<object>>(v)
+          Left: na => na,
+          Right: v => v
         ),
-        byte[] bytes => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(bytes)),
+        byte[] bytes => UnboxStep.Value(bytes),
         // Expose sequences (Avro arrays) and records as nodes for further traversal
-        System.Collections.IEnumerable when node is not string => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(node)),
-        GenericRecord => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(node)),
+        System.Collections.IEnumerable when node is not string => UnboxStep.Value(node),
+        GenericRecord => UnboxStep.Value(node),
         // Avro Enum and Fixed: pass through as nodes (or map Fixed to bytes if desired later)
-        GenericEnum => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(node)),
-        GenericFixed gf => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(gf.Value)),
-        _ => Left<Unknown<object>, Unknown<object>>(Unknown.New(node))
+        GenericEnum => UnboxStep.Value(node),
+        GenericFixed gf => UnboxStep.Value(gf.Value),
+        _ => UnboxStep.NotApplicable(node)
       },
       CloneNode: x => x
     );

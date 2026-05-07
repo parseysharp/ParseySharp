@@ -12,9 +12,11 @@ public static class ParsePathNavNewtonsoft
         {
           JObject obj =>
             (obj.TryGetValue(name, out var child)
-              ? Right<Unknown<JToken>, Option<JToken>>(Optional(child))
-              : Right<Unknown<JToken>, Option<JToken>>(None)),
-          _ => Left<Unknown<JToken>, Option<JToken>>(Unknown.New(jt))
+              ? Optional(child).Filter(c => c.Type != JTokenType.Null).Match(
+                  Some: c => NavStep.Value<JToken>(c),
+                  None: () => NavStep.Null<JToken>())
+              : NavStep.Absent<JToken>()),
+          _ => NavStep.NotApplicable(jt)
         },
 
       Index: (jt, i) =>
@@ -22,54 +24,58 @@ public static class ParsePathNavNewtonsoft
         {
           JArray arr when i >= 0 =>
             (i < arr.Count
-              ? Right<Unknown<JToken>, Option<JToken>>(Optional(arr[i]))
-              : Right<Unknown<JToken>, Option<JToken>>(None)),
-          _ => Left<Unknown<JToken>, Option<JToken>>(Unknown.New(jt))
+              ? Optional(arr[i]).Filter(c => c.Type != JTokenType.Null).Match(
+                  Some: c => NavStep.Value<JToken>(c),
+                  None: () => NavStep.Null<JToken>())
+              : NavStep.Absent<JToken>()),
+          _ => NavStep.NotApplicable(jt)
         },
 
       Unbox: jt => jt switch
       {
-        null => Right<Unknown<JToken>, Unknown<object>>(new Unknown<object>.None()),
+        null => UnboxStep.Null(),
 
         // Keep arrays/objects as-is (so Seq and nested parsing can work)
-        JObject or JArray => Right<Unknown<JToken>, Unknown<object>>(Unknown.New<object>(jt)),
+        JObject or JArray => UnboxStep.Value(jt),
 
-        // Null token => None
+        // Null token => Null
         JValue v when v.Type == JTokenType.Null
-          => Right<Unknown<JToken>, Unknown<object>>(Unknown.UnsafeFromOption<object>(None)),
+          => UnboxStep.Null(),
 
         // Strings
         JValue v when v.Type == JTokenType.String
-          => Identity.Pure(v.Value<string>()).Map(x => x is null ? new Unknown<object>.None() : Unknown.New<object>(x)).Run(),
+          => Optional(v.Value<string>()).Match(
+              Some: s => UnboxStep.Value(s),
+              None: () => UnboxStep.Null()),
 
         // Booleans
         JValue v when v.Type == JTokenType.Boolean
-          => Right<Unknown<JToken>, Unknown<object>>(Unknown.New<object>(v.Value<bool>())),
+          => UnboxStep.Value(v.Value<bool>()),
 
         // Integers (prefer Int32, then Int64); guard against provider overflow by Try-wrapping
         JValue v when v.Type == JTokenType.Integer
-          => ((Func<Either<Unknown<JToken>, Unknown<object>>>)(() =>
+          => ((Func<UnboxStep>)(() =>
             {
               var l = v.Value<long>();
               return (l <= int.MaxValue && l >= int.MinValue)
-                ? Right<Unknown<JToken>, Unknown<object>>(Unknown.New<object>((int)l))
-                : Right<Unknown<JToken>, Unknown<object>>(Unknown.New<object>(l));
+                ? UnboxStep.Value((int)l)
+                : UnboxStep.Value(l);
             }))
-            .Try<Unknown<JToken>, Either<Unknown<JToken>, Unknown<object>>>(_ => Unknown.New(jt))
+            .Try<UnboxStep, UnboxStep>(_ => UnboxStep.Value(v.ToString()))
             .Match(
-              Left: _ => Right<Unknown<JToken>, Unknown<object>>(Unknown.New<object>(v.ToString())),
+              Left: fallback => fallback,
               Right: r => r
             ),
 
         // Floats/Decimals (use double)
         JValue v when v.Type == JTokenType.Float
-          => Right<Unknown<JToken>, Unknown<object>>(Unknown.New<object>(v.Value<double>())),
+          => UnboxStep.Value(v.Value<double>()),
 
         // Otherwise fall back to string representation (or treat as None if you prefer)
         JValue v
-          => Right<Unknown<JToken>, Unknown<object>>(Unknown.New<object>(v.ToString())),
+          => UnboxStep.Value(v.ToString()),
 
-        _ => Left<Unknown<JToken>, Unknown<object>>(Unknown.New(jt))
+        _ => UnboxStep.NotApplicable(jt)
       },
       CloneNode: x => x
     );

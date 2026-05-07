@@ -1,39 +1,36 @@
-public abstract record Unknown<T>
-{
-  public sealed record Value(T Get) : Unknown<T>;
-  public sealed record None() : Unknown<T>;
+namespace ParseySharp;
 
-  public Unknown<U> Map<U>(Func<T, U> f) => Unknown.Match(
-    this,
-    Some: x => Unknown.New(f(x)),
-    None: () => new Unknown<U>.None()
-  );
+public sealed class Unknown<T>(OneOf<Value<T>, Null, Absent> input)
+  : OneOfBase<Value<T>, Null, Absent>(input)
+{
+  public Unknown<U> Map<U>(Func<T, U> f) => this.Match(
+    Value:  v => Unknown.New(f(v.Get)),
+    Null:   _ => Unknown.Null<U>(),
+    Absent: _ => Unknown.Absent<U>());
 }
 
 public static class Unknown
 {
-  public static Unknown<T> New<T>(T value) => 
-    value is null ? new Unknown<T>.None() : new Unknown<T>.Value(value);
+  public static Unknown<T> Value<T>(T v) => new(new Value<T>(v));
+  public static Unknown<T> Null<T>()     => new(new Null());
+  public static Unknown<T> Absent<T>()   => new(new Absent());
 
-  public static Unknown<T> SequenceOption<T>(this Option<Unknown<T>> option) =>
-    option.IfNone(() => new Unknown<T>.None());
+  public static Unknown<T> New<T>(T value) =>
+    value is null ? Null<T>() : Value(value);
 
-  public static Option<T> ToOption<T>(this Unknown<T> unknown) =>
-    unknown.Match(
-      Some: x => Optional(x),
-      None: () => None
-    );
+  public static Option<T> ToOption<T>(this Unknown<T> u) =>
+    u.Match(
+      Value:  v => Optional(v.Get),
+      Null:   _ => Option<T>.None,
+      Absent: _ => Option<T>.None);
+}
 
-  public static Unknown<T> UnsafeFromOption<T>(this Option<T> option) =>
-    option.Match(
-      Some: x => New(x),
-      None: () => new Unknown<T>.None()
-    );
-
-  public static U Match<T, U>(this Unknown<T> unknown, Func<T, U> Some, Func<U> None) => unknown switch
-  {
-    Unknown<T>.Value v => Some(v.Get),
-    Unknown<T>.None _ => None(),
-    _ => throw new Exception("Impossible")
-  };
+public static class UnknownExtensions
+{
+  public static U Match<T, U>(
+    this Unknown<T> u,
+    Func<Value<T>, U> Value,
+    Func<Null, U>     Null,
+    Func<Absent, U>   Absent) =>
+    u.Match<U>(Value, Null, Absent);
 }

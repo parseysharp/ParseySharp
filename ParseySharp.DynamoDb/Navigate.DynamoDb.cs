@@ -7,40 +7,46 @@ namespace ParseySharp.DynamoDb;
 
 public static class ParsePathNavDynamoDb
 {
+  static bool IsDynamoNull(AttributeValue? av) => av is null || av.NULL == true;
+
   public static readonly ParsePathNav<AttributeValue> DynamoDb =
     ParsePathNav<AttributeValue>.Create(
       Prop: (av, name) =>
         av is null
-          ? Right<Unknown<AttributeValue>, Option<AttributeValue>>(None)
+          ? NavStep.NotApplicable<AttributeValue>(av!)
           : av.M is { } map
             ? (map.TryGetValue(name, out var child)
-                ? Right<Unknown<AttributeValue>, Option<AttributeValue>>(Optional(child))
-                : Right<Unknown<AttributeValue>, Option<AttributeValue>>(None))
-            : Left<Unknown<AttributeValue>, Option<AttributeValue>>(Unknown.New(av)),
+                ? Optional(child).Filter(c => !IsDynamoNull(c)).Match(
+                    Some: c => NavStep.Value<AttributeValue>(c),
+                    None: () => NavStep.Null<AttributeValue>())
+                : NavStep.Absent<AttributeValue>())
+            : NavStep.NotApplicable(av),
 
       Index: (av, i) =>
         av is null
-          ? Right<Unknown<AttributeValue>, Option<AttributeValue>>(None)
+          ? NavStep.NotApplicable<AttributeValue>(av!)
           : i < 0
-            ? Left<Unknown<AttributeValue>, Option<AttributeValue>>(Unknown.New(av))
+            ? NavStep.NotApplicable(av)
             : av.L is { } list
               ? (i < list.Count
-                  ? Right<Unknown<AttributeValue>, Option<AttributeValue>>(Optional(list[i]))
-                  : Right<Unknown<AttributeValue>, Option<AttributeValue>>(None))
-              : Left<Unknown<AttributeValue>, Option<AttributeValue>>(Unknown.New(av)),
+                  ? Optional(list[i]).Filter(c => !IsDynamoNull(c)).Match(
+                      Some: c => NavStep.Value<AttributeValue>(c),
+                      None: () => NavStep.Null<AttributeValue>())
+                  : NavStep.Absent<AttributeValue>())
+              : NavStep.NotApplicable(av),
 
       Unbox: av =>
       {
         if (av is null)
-          return Right<Unknown<AttributeValue>, Unknown<object>>(new Unknown<object>.None());
+          return UnboxStep.Null();
 
         // Null
         if (av.NULL == true)
-          return Right<Unknown<AttributeValue>, Unknown<object>>(Unknown.UnsafeFromOption<object>(None));
+          return UnboxStep.Null();
 
         // String
         if (av.S != null)
-          return Right<Unknown<AttributeValue>, Unknown<object>>(Unknown.New<object>(av.S));
+          return UnboxStep.Value(av.S);
 
         // Number (encoded as string) with narrowing rules consistent with other navigators
         if (av.N != null)
@@ -54,49 +60,49 @@ public static class ParsePathNavDynamoDb
               try
               {
                 if (m <= int.MaxValue && m >= int.MinValue)
-                  return Right<Unknown<AttributeValue>, Unknown<object>>(Unknown.New<object>((int)m));
+                  return UnboxStep.Value((int)m);
               }
               catch { /* fall through */ }
               try
               {
                 if (m <= long.MaxValue && m >= long.MinValue)
-                  return Right<Unknown<AttributeValue>, Unknown<object>>(Unknown.New<object>((long)m));
+                  return UnboxStep.Value((long)m);
               }
               catch { /* fall through */ }
               // Very large integer beyond Int64: preserve as string to avoid loss
-              return Right<Unknown<AttributeValue>, Unknown<object>>(Unknown.New<object>(s));
+              return UnboxStep.Value(s);
             }
             // Non-integral: surface as double when representable, else preserve as string
             try
             {
               var d = Convert.ToDouble(m, CultureInfo.InvariantCulture);
               if (double.IsFinite(d))
-                return Right<Unknown<AttributeValue>, Unknown<object>>(Unknown.New<object>(d));
+                return UnboxStep.Value(d);
             }
             catch { /* fall back to string below */ }
-            return Right<Unknown<AttributeValue>, Unknown<object>>(Unknown.New<object>(s));
+            return UnboxStep.Value(s);
           }
           // Not a valid decimal: keep raw string
-          return Right<Unknown<AttributeValue>, Unknown<object>>(Unknown.New<object>(s));
+          return UnboxStep.Value(s);
         }
 
         // Binary
         if (av.B != null)
         {
           var bytes = av.B.ToArray();
-          return Right<Unknown<AttributeValue>, Unknown<object>>(Unknown.New<object>(bytes));
+          return UnboxStep.Value(bytes);
         }
 
         // Binary set (only if non-empty)
         if (av.BS != null && av.BS.Count > 0)
         {
           var list = av.BS.Select(ms => ms.ToArray()).ToList();
-          return Right<Unknown<AttributeValue>, Unknown<object>>(Unknown.New<object>(list));
+          return UnboxStep.Value(list);
         }
 
         // String set (only if non-empty)
         if (av.SS != null && av.SS.Count > 0)
-          return Right<Unknown<AttributeValue>, Unknown<object>>(Unknown.New<object>(av.SS));
+          return UnboxStep.Value(av.SS);
 
         // Number set (strings) (only if non-empty) -> apply same numeric policy element-wise; if any element overflows/loses precision, keep as strings for that element
         if (av.NS != null && av.NS.Count > 0)
@@ -128,23 +134,23 @@ public static class ParsePathNavDynamoDb
               projected.Add(ns);
             }
           }
-          return Right<Unknown<AttributeValue>, Unknown<object>>(Unknown.New<object>(projected));
+          return UnboxStep.Value(projected);
         }
 
         // List: expose items so Seq can iterate (empty lists are valid in DynamoDB)
         if (av.L != null)
-          return Right<Unknown<AttributeValue>, Unknown<object>>(Unknown.New<object>(av.L));
+          return UnboxStep.Value(av.L);
 
         // Map: remain as node for key-based traversal (empty maps are valid in DynamoDB)
         if (av.M != null)
-          return Right<Unknown<AttributeValue>, Unknown<object>>(Unknown.New<object>(av));
+          return UnboxStep.Value(av);
 
         // Bool false (placed after other checks to avoid misclassification)
         if (av.BOOL.HasValue)
-          return Right<Unknown<AttributeValue>, Unknown<object>>(Unknown.New<object>(av.BOOL.Value));
+          return UnboxStep.Value(av.BOOL.Value);
 
-        // Fallback: treat as None
-        return Right<Unknown<AttributeValue>, Unknown<object>>(new Unknown<object>.None());
+        // Fallback: treat as Null
+        return UnboxStep.Null();
       },
       CloneNode: x => x
     );

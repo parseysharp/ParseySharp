@@ -9,33 +9,43 @@ public static class ParsePathNavYaml
       Prop: (yn, name) =>
         yn is YamlMappingNode map
           ? (map.Children.TryGetValue(new YamlScalarNode(name), out var child)
-              ? Right<Unknown<YamlNode>, Option<YamlNode>>(Optional(child))
-              : Right<Unknown<YamlNode>, Option<YamlNode>>(None))
-          : Left<Unknown<YamlNode>, Option<YamlNode>>(Unknown.New(yn)),
+              ? Optional(child).Filter(c => !IsYamlNull(c)).Match(
+                  Some: c => NavStep.Value<YamlNode>(c),
+                  None: () => NavStep.Null<YamlNode>())
+              : NavStep.Absent<YamlNode>())
+          : NavStep.NotApplicable(yn),
 
       Index: (yn, i) =>
         yn is YamlSequenceNode seq && i >= 0
           ? (i < seq.Children.Count
-              ? Right<Unknown<YamlNode>, Option<YamlNode>>(Optional(seq.Children[i]))
-              : Right<Unknown<YamlNode>, Option<YamlNode>>(None))
-          : Left<Unknown<YamlNode>, Option<YamlNode>>(Unknown.New(yn)),
+              ? Optional(seq.Children[i]).Filter(c => !IsYamlNull(c)).Match(
+                  Some: c => NavStep.Value<YamlNode>(c),
+                  None: () => NavStep.Null<YamlNode>())
+              : NavStep.Absent<YamlNode>())
+          : NavStep.NotApplicable(yn),
 
       Unbox: yn => yn switch
       {
         YamlScalarNode s => UnboxScalar(s),
-        YamlSequenceNode or YamlMappingNode => Right<Unknown<YamlNode>, Unknown<object>>(Unknown.New<object>(yn)),
-        _ => Left<Unknown<YamlNode>, Unknown<object>>(Unknown.New(yn))
+        YamlSequenceNode or YamlMappingNode => UnboxStep.Value(yn),
+        _ => UnboxStep.NotApplicable(yn)
       },
       CloneNode: x => x
     );
 
-  static Either<Unknown<YamlNode>, Unknown<object>> UnboxScalar(YamlScalarNode s)
+  static UnboxStep UnboxScalar(YamlScalarNode s)
   {
-    // Null in YAML: empty, "null", "~"
     var val = s.Value;
-    if (val is null || val.Length == 0 || string.Equals(val, "null", StringComparison.OrdinalIgnoreCase) || val == "~")
-      return Right<Unknown<YamlNode>, Unknown<object>>(Unknown.UnsafeFromOption<object>(None));
+    if (IsYamlNull(s))
+      return UnboxStep.Null();
 
-    return Right<Unknown<YamlNode>, Unknown<object>>(Unknown.New<object>(val));
+    return UnboxStep.Value(val!);
   }
+
+  static bool IsYamlNull(YamlNode n) =>
+    n is YamlScalarNode s &&
+    (s.Value is null
+      || s.Value.Length == 0
+      || string.Equals(s.Value, "null", StringComparison.OrdinalIgnoreCase)
+      || s.Value == "~");
 }
