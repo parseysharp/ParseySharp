@@ -206,44 +206,51 @@ Apache-2.0. See `LICENSE`.
 
 To add a new carrier, you only need to supply four functions to a `ParsePathNav<TCarrier>`:
 
-- `Prop` (drill into a carrier by name)
-- `Index` (drill into a carrier by array index)
-- `Unbox` (extract a primitive value from a carrier)
-- `Clone` (clone or otherwise produce an owned value for safe iteration/yielding)
+- `Prop` (drill into a carrier by name) — returns `NavStep<TCarrier>`
+- `Index` (drill into a carrier by array index) — returns `NavStep<TCarrier>`
+- `Unbox` (extract a primitive value from a carrier) — returns `UnboxStep`
+- `CloneNode` (clone or otherwise produce an owned value for safe iteration/yielding)
+
+`NavStep<S>` has four arms — `NotApplicable` (the carrier is not the right shape for this lookup), `Value` (lookup found a usable child), `Null` (lookup found the format's null sentinel), `Absent` (lookup found no entry at this key/index). `UnboxStep` has three — `NotApplicable` / `Value` / `Null`. Each variant is constructed via a named static factory; the compiler enforces exhaustive matching on the consumer side.
 
 Here’s a concrete illustration using a familiar type, `System.Text.Json.JsonElement`.
 
 ```csharp
 using System.Text.Json;
+using ParseySharp;
 
 public static class ParsePathNavJson
 {
-  public static readonly ParsePathNav<JsonElement> Json = new(
+  public static readonly ParsePathNav<JsonElement> Json = ParsePathNav<JsonElement>.Create(
     Prop: (node, name) =>
-      node.ValueKind == JsonValueKind.Object && node.TryGetProperty(name, out var child)
-        ? Right<Unknown<JsonElement>, Option<JsonElement>>(Optional(child))
-        : node.ValueKind == JsonValueKind.Object
-          ? Right<Unknown<JsonElement>, Option<JsonElement>>(None)
-          : Left<Unknown<JsonElement>, Option<JsonElement>>(Unknown.New(node)),
+      node.ValueKind == JsonValueKind.Object
+        ? (node.TryGetProperty(name, out var child)
+            ? (child.ValueKind == JsonValueKind.Null || child.ValueKind == JsonValueKind.Undefined
+                ? NavStep.Null<JsonElement>()
+                : NavStep.Value<JsonElement>(child))
+            : NavStep.Absent<JsonElement>())
+        : NavStep.NotApplicable(node),
 
     Index: (node, i) =>
-      node.ValueKind == JsonValueKind.Array && i >= 0 && i < node.GetArrayLength()
-        ? Right<Unknown<JsonElement>, Option<JsonElement>>(Optional(node[i]))
-        : node.ValueKind == JsonValueKind.Array
-          ? Right<Unknown<JsonElement>, Option<JsonElement>>(None)
-          : Left<Unknown<JsonElement>, Option<JsonElement>>(Unknown.New(node)),
+      node.ValueKind == JsonValueKind.Array && i >= 0
+        ? (i < node.GetArrayLength()
+            ? (node[i].ValueKind == JsonValueKind.Null || node[i].ValueKind == JsonValueKind.Undefined
+                ? NavStep.Null<JsonElement>()
+                : NavStep.Value<JsonElement>(node[i]))
+            : NavStep.Absent<JsonElement>())
+        : NavStep.NotApplicable(node),
 
     Unbox: node => node.ValueKind switch
     {
-      JsonValueKind.Null   => Right<Unknown<JsonElement>, Unknown<object>>(new Unknown<object>.None()),
-      JsonValueKind.String => Right<Unknown<JsonElement>, Unknown<object>>(Unknown.New<object>(node.GetString()!)),
-      JsonValueKind.True   => Right<Unknown<JsonElement>, Unknown<object>>(Unknown.New<object>(true)),
-      JsonValueKind.False  => Right<Unknown<JsonElement>, Unknown<object>>(Unknown.New<object>(false)),
+      JsonValueKind.Null   => UnboxStep.Null(),
+      JsonValueKind.String => UnboxStep.Value(node.GetString()!),
+      JsonValueKind.True   => UnboxStep.Value(true),
+      JsonValueKind.False  => UnboxStep.Value(false),
       // handle other cases
-      _ => Left<Unknown<JsonElement>, Unknown<object>>(Unknown.New(node))
+      _ => UnboxStep.NotApplicable(node)
     },
 
-    Clone: node =>
+    CloneNode: node =>
       node.ValueKind == JsonValueKind.Undefined
         ? JsonDocument.Parse("null").RootElement.Clone()
         : node.Clone()

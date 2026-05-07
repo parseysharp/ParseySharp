@@ -2,71 +2,78 @@ namespace ParseySharp;
 
 public static class ParsePathNavHotChocolate
 {
+    static bool IsHcNull(IValueNode? n) => n is null or NullValueNode;
+
     public static readonly ParsePathNav<IValueNode> HotChocolate =
         ParsePathNav<IValueNode>.Create(
             Prop: (node, name) =>
                 node is ObjectValueNode obj
-                    ? Right<Unknown<IValueNode>, Option<IValueNode>>(
-                        Optional(obj.Fields.FirstOrDefault(f => f.Name.Value == name)).Map(f => f.Value))
-                    : Left<Unknown<IValueNode>, Option<IValueNode>>(Unknown.New(node)),
+                    ? Optional(obj.Fields.FirstOrDefault(f => f.Name.Value == name))
+                        .Match(
+                            Some: f => Optional(f.Value).Filter(v => !IsHcNull(v)).Match(
+                                Some: v => NavStep.Value<IValueNode>(v),
+                                None: () => NavStep.Null<IValueNode>()),
+                            None: () => NavStep.Absent<IValueNode>())
+                    : NavStep.NotApplicable(node),
 
             Index: (node, i) =>
                 node is ListValueNode list && i >= 0
                     ? (i < list.Items.Count
-                        ? Right<Unknown<IValueNode>, Option<IValueNode>>(Optional(list.Items[i]))
-                        : Right<Unknown<IValueNode>, Option<IValueNode>>(None))
-                    : Left<Unknown<IValueNode>, Option<IValueNode>>(Unknown.New(node)),
+                        ? Optional(list.Items[i]).Filter(v => !IsHcNull(v)).Match(
+                            Some: v => NavStep.Value<IValueNode>(v),
+                            None: () => NavStep.Null<IValueNode>())
+                        : NavStep.Absent<IValueNode>())
+                    : NavStep.NotApplicable(node),
 
             Unbox: node => node switch
             {
                 null or NullValueNode
-                    => Right<Unknown<IValueNode>, Unknown<object>>(Unknown.UnsafeFromOption<object>(None)),
+                    => UnboxStep.Null(),
 
                 ListValueNode list
-                    => Right<Unknown<IValueNode>, Unknown<object>>(Unknown.New<object>(list.Items)),
+                    => UnboxStep.Value(list.Items),
 
                 ObjectValueNode
-                    => Right<Unknown<IValueNode>, Unknown<object>>(Unknown.New<object>(node)),
+                    => UnboxStep.Value(node),
 
                 StringValueNode s
-                    => Right<Unknown<IValueNode>, Unknown<object>>(Unknown.New<object>(s.Value)),
+                    => UnboxStep.Value(s.Value),
 
                 BooleanValueNode b
-                    => Right<Unknown<IValueNode>, Unknown<object>>(Unknown.New<object>(b.Value)),
+                    => UnboxStep.Value(b.Value),
 
                 EnumValueNode e
-                    => Right<Unknown<IValueNode>, Unknown<object>>(Unknown.New<object>(e.Value)),
+                    => UnboxStep.Value(e.Value),
 
                 IntValueNode n => UnboxInt(n),
 
                 FloatValueNode f => UnboxFloat(f),
 
-                _ => Left<Unknown<IValueNode>, Unknown<object>>(Unknown.New(node))
+                _ => UnboxStep.NotApplicable(node)
             },
 
             CloneNode: x => x
         );
 
-    static Either<Unknown<IValueNode>, Unknown<object>> UnboxInt(IntValueNode n) =>
-        ((Func<Either<Unknown<IValueNode>, Unknown<object>>>)(() =>
+    static UnboxStep UnboxInt(IntValueNode n) =>
+        ((Func<UnboxStep>)(() =>
         {
             var l = n.ToInt64();
             return (l <= int.MaxValue && l >= int.MinValue)
-                ? Right<Unknown<IValueNode>, Unknown<object>>(Unknown.New<object>((int)l))
-                : Right<Unknown<IValueNode>, Unknown<object>>(Unknown.New<object>(l));
+                ? UnboxStep.Value((int)l)
+                : UnboxStep.Value(l);
         }))
-        .Try<Unknown<IValueNode>, Either<Unknown<IValueNode>, Unknown<object>>>(_ => Unknown.New<IValueNode>(n))
+        .Try<UnboxStep, UnboxStep>(_ => UnboxStep.Value(n.ToString()))
         .Match(
-            Left: _ => Right<Unknown<IValueNode>, Unknown<object>>(Unknown.New<object>(n.ToString())),
+            Left: fallback => fallback,
             Right: r => r
         );
 
-    static Either<Unknown<IValueNode>, Unknown<object>> UnboxFloat(FloatValueNode f) =>
-        ((Func<Either<Unknown<IValueNode>, Unknown<object>>>)(() =>
-            Right<Unknown<IValueNode>, Unknown<object>>(Unknown.New<object>(f.ToDouble()))))
-        .Try<Unknown<IValueNode>, Either<Unknown<IValueNode>, Unknown<object>>>(_ => Unknown.New<IValueNode>(f))
+    static UnboxStep UnboxFloat(FloatValueNode f) =>
+        ((Func<UnboxStep>)(() => UnboxStep.Value(f.ToDouble())))
+        .Try<UnboxStep, UnboxStep>(_ => UnboxStep.Value(f.ToString()))
         .Match(
-            Left: _ => Right<Unknown<IValueNode>, Unknown<object>>(Unknown.New<object>(f.ToString())),
+            Left: fallback => fallback,
             Right: r => r
         );
 }

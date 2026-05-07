@@ -27,9 +27,11 @@ public static class ParsePathNavMessagePack
         {
           MsgNode.Map m =>
             (m.Items.TryGetValue(name, out var child)
-              ? Right<Unknown<MsgNode>, Option<MsgNode>>(Optional(child))
-              : Right<Unknown<MsgNode>, Option<MsgNode>>(None)),
-          _ => Left<Unknown<MsgNode>, Option<MsgNode>>(Unknown.New(node))
+              ? Optional(child).Filter(c => c is not MsgNode.Nil).Match(
+                  Some: c => NavStep.Value<MsgNode>(c),
+                  None: () => NavStep.Null<MsgNode>())
+              : NavStep.Absent<MsgNode>()),
+          _ => NavStep.NotApplicable(node)
         },
 
       Index: (node, i) =>
@@ -37,35 +39,37 @@ public static class ParsePathNavMessagePack
         {
           MsgNode.Array a when i >= 0 =>
             (i < a.Items.Count
-              ? Right<Unknown<MsgNode>, Option<MsgNode>>(Optional(a.Items[i]))
-              : Right<Unknown<MsgNode>, Option<MsgNode>>(None)),
-          _ => Left<Unknown<MsgNode>, Option<MsgNode>>(Unknown.New(node))
+              ? Optional(a.Items[i]).Filter(c => c is not MsgNode.Nil).Match(
+                  Some: c => NavStep.Value<MsgNode>(c),
+                  None: () => NavStep.Null<MsgNode>())
+              : NavStep.Absent<MsgNode>()),
+          _ => NavStep.NotApplicable(node)
         },
 
       Unbox: node => node switch
       {
-        MsgNode.Nil => Right<Unknown<MsgNode>, Unknown<object>>(new Unknown<object>.None()),
-        MsgNode.Str x => Right<Unknown<MsgNode>, Unknown<object>>(Unknown.New<object>(x.Value)),
+        MsgNode.Nil => UnboxStep.Null(),
+        MsgNode.Str x => UnboxStep.Value(x.Value),
         // Prefer Int32 when in range, else Int64
         MsgNode.I64 x =>
           (x.Value <= int.MaxValue && x.Value >= int.MinValue)
-            ? Right<Unknown<MsgNode>, Unknown<object>>(Unknown.New<object>((int)x.Value))
-            : Right<Unknown<MsgNode>, Unknown<object>>(Unknown.New<object>(x.Value)),
+            ? UnboxStep.Value((int)x.Value)
+            : UnboxStep.Value(x.Value),
         // U64: Int32 if in range, else Int64 if it fits, else string to preserve value
         MsgNode.U64 x =>
           (x.Value <= (ulong)int.MaxValue)
-            ? Right<Unknown<MsgNode>, Unknown<object>>(Unknown.New<object>((int)x.Value))
+            ? UnboxStep.Value((int)x.Value)
             : (x.Value <= long.MaxValue)
-              ? Right<Unknown<MsgNode>, Unknown<object>>(Unknown.New<object>((long)x.Value))
-              : Right<Unknown<MsgNode>, Unknown<object>>(Unknown.New<object>(x.Value.ToString())),
-        MsgNode.F64 x => Right<Unknown<MsgNode>, Unknown<object>>(Unknown.New<object>(x.Value)),
-        MsgNode.Bool x => Right<Unknown<MsgNode>, Unknown<object>>(Unknown.New<object>(x.Value)),
-        MsgNode.Bin x => Right<Unknown<MsgNode>, Unknown<object>>(Unknown.New<object>(x.Value)),
+              ? UnboxStep.Value((long)x.Value)
+              : UnboxStep.Value(x.Value.ToString()),
+        MsgNode.F64 x => UnboxStep.Value(x.Value),
+        MsgNode.Bool x => UnboxStep.Value(x.Value),
+        MsgNode.Bin x => UnboxStep.Value(x.Value),
         // Arrays expose their items so Seq can iterate naturally
-        MsgNode.Array a => Right<Unknown<MsgNode>, Unknown<object>>(Unknown.New<object>(a.Items)),
+        MsgNode.Array a => UnboxStep.Value(a.Items),
         // Maps remain as nodes for key-based traversal
-        MsgNode.Map => Right<Unknown<MsgNode>, Unknown<object>>(Unknown.New<object>(node)),
-        _ => Left<Unknown<MsgNode>, Unknown<object>>(Unknown.New(node))
+        MsgNode.Map => UnboxStep.Value(node),
+        _ => UnboxStep.NotApplicable(node)
       },
       CloneNode: x => x
     );

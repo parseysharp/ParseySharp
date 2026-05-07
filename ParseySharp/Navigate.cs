@@ -48,33 +48,67 @@ public record class ParsePathErr(string Message, string Expected, object Actual,
     new(Message, Expected, Actual, path + Path);
 }
 
+public sealed class NavStep<S>(OneOf<NotApplicable<S>, Value<S>, Null, Absent> input)
+  : OneOfBase<NotApplicable<S>, Value<S>, Null, Absent>(input);
+
+public static class NavStep
+{
+  public static NavStep<S> NotApplicable<S>(S source) => new(new NotApplicable<S>(source));
+  public static NavStep<S> Value<S>(S v)              => new(new Value<S>(v));
+  public static NavStep<S> Null<S>()                  => new(new Null());
+  public static NavStep<S> Absent<S>()                => new(new Absent());
+}
+
+public static class NavStepExtensions
+{
+  public static U Match<S, U>(
+    this NavStep<S> step,
+    Func<NotApplicable<S>, U> NotApplicable,
+    Func<Value<S>, U>         Value,
+    Func<Null, U>             Null,
+    Func<Absent, U>           Absent) =>
+    step.Match<U>(NotApplicable, Value, Null, Absent);
+}
+
+public sealed class UnboxStep(OneOf<NotApplicable<object>, Value<object>, Null> input)
+  : OneOfBase<NotApplicable<object>, Value<object>, Null>(input)
+{
+  public static UnboxStep NotApplicable(object source) => new(new NotApplicable<object>(source));
+  public static new UnboxStep Value(object o)          => new(new Value<object>(o));
+  public static UnboxStep Null()                       => new(new Null());
+}
+
+public static class UnboxStepExtensions
+{
+  public static U Match<U>(
+    this UnboxStep step,
+    Func<NotApplicable<object>, U> NotApplicable,
+    Func<Value<object>, U>         Value,
+    Func<Null, U>                  Null) =>
+    step.Match<U>(NotApplicable, Value, Null);
+}
+
 public static class PathParser
 {
 
-  public static Validation<Seq<ParsePathErr>, Option<B>> NextStep<B>(
+  public static Validation<Seq<ParsePathErr>, Unknown<B>> NextStep<B>(
     ListZipper<PathSeg> path,
-    Func<B, Either<Unknown<B>, Option<B>>> getNext,
-    Func<Option<B>, Validation<Seq<ParsePathErr>, B>> runNext,
-    Option<B> input
-  ) => input.Match(
-    None: () => runNext(None).Map(Some),
-    Some: i => getNext(i).Match<Validation<Seq<ParsePathErr>, Option<B>>>(
-      Left: _ => runNext(None).Map(Some),
-      Right: x => x.Match(
-        None: () => path.Nexts.IsEmpty
-          ? Success<Seq<ParsePathErr>, Option<B>>(None)
-          : runNext(None).Map(Some),
-        Some: x => runNext(x).Map(Some)
-      )
-    )
-  );
-
-  public static Validation<Seq<ParsePathErr>, Unknown<B>> NextStepU<B>(
-    ListZipper<PathSeg> path,
-    Func<B, Either<Unknown<B>, Option<B>>> getNext,
-    Func<Option<B>, Validation<Seq<ParsePathErr>, B>> runNext,
+    Func<B, NavStep<B>> getNext,
+    Func<Unknown<B>, Seq<ParsePathErr>> missingErrors,
     Unknown<B> input
-  ) => NextStep(path, getNext, runNext, input.ToOption()).Map(Unknown.UnsafeFromOption);
+  ) =>
+    input.Match(
+      Value: v => getNext(v.Get).Match(
+        NotApplicable: _ => Fail<Seq<ParsePathErr>, Unknown<B>>(missingErrors(input)),
+        Value:         w => Success<Seq<ParsePathErr>, Unknown<B>>(Unknown.Value(w.Get)),
+        Null:          _ => path.Nexts.IsEmpty
+          ? Success<Seq<ParsePathErr>, Unknown<B>>(Unknown.Null<B>())
+          : Fail<Seq<ParsePathErr>, Unknown<B>>(missingErrors(input)),
+        Absent:        _ => path.Nexts.IsEmpty
+          ? Success<Seq<ParsePathErr>, Unknown<B>>(Unknown.Absent<B>())
+          : Fail<Seq<ParsePathErr>, Unknown<B>>(missingErrors(input))),
+      Null:   _ => Fail<Seq<ParsePathErr>, Unknown<B>>(missingErrors(input)),
+      Absent: _ => Fail<Seq<ParsePathErr>, Unknown<B>>(missingErrors(input)));
 
   public static Validation<Seq<ParsePathErr>, Unknown<B>> Navigate<B>(
     ParsePathNav<B> nav,
@@ -89,80 +123,70 @@ public static class PathParser
           from next in z.Focus switch
           {
             PathSeg.Key k =>
-              NextStepU<B>(
+              NextStep<B>(
                 z,
-                cur => nav.Prop(cur, k.Name),
-                x => OptionExtensions.ToValidation<Seq<ParsePathErr>, B>(
-                  x,
-                  [new ParsePathErr(
-                    $"Missing property {k.Name}",
-                    Name,
-                    cur.Map(nav.CloneNode),
-                  PathSegRender.ToStrings(toSeq(z.Prevs.Reverse()))
-                )]),
-                cur
-              ),
-            PathSeg.Index ix =>
-              NextStepU<B>(
-                z,
-                cur => nav.Index(cur, ix.I),
-                x => OptionExtensions.ToValidation<Seq<ParsePathErr>, B>(
-                  x,
-                  [new ParsePathErr(
-                    $"Missing index {ix.I}",
+                b => nav.Prop(b, k.Name),
+                u => [new ParsePathErr(
+                  $"Missing property {k.Name}",
                   Name,
-                  cur.Map(nav.CloneNode),
-                  PathSegRender.ToStrings(toSeq(z.Prevs.Reverse()))
-                )]),
-                cur
-              ),
+                  u.ToOption().Map(nav.CloneNode),
+                  PathSegRender.ToStrings(toSeq(z.Prevs.Reverse())))],
+                cur),
+            PathSeg.Index ix =>
+              NextStep<B>(
+                z,
+                b => nav.Index(b, ix.I),
+                u => [new ParsePathErr(
+                  $"Missing index {ix.I}",
+                  Name,
+                  u.ToOption().Map(nav.CloneNode),
+                  PathSegRender.ToStrings(toSeq(z.Prevs.Reverse())))],
+                cur),
             _ =>
               Fail<Seq<ParsePathErr>, Unknown<B>>([new ParsePathErr(
                 $"Unknown path segment type {z.Focus}",
                 Name,
-                Optional(cur),
-                PathSegRender.ToStrings(toSeq(z.Prevs.Reverse()))
-              )])
+                cur.ToOption(),
+                PathSegRender.ToStrings(toSeq(z.Prevs.Reverse())))])
           }
           select next);
 
 }
 
 public record ParsePathNav<S>(
-  Func<S, string, Either<Unknown<S>, Option<S>>> UnsafeProp,
-  Func<S, int, Either<Unknown<S>, Option<S>>> UnsafeIndex,
-  Func<S, Either<Unknown<S>, Unknown<object>>> UnsafeUnbox,
-  Func<S, S> CloneNode
+  Func<S, string, NavStep<S>> UnsafeProp,
+  Func<S, int, NavStep<S>>    UnsafeIndex,
+  Func<S, UnboxStep>          UnsafeUnbox,
+  Func<S, S>                  CloneNode
 )
 {
 
   public static ParsePathNav<S> Create(
-    Func<S, string, Either<Unknown<S>, Option<S>>> Prop,
-    Func<S, int, Either<Unknown<S>, Option<S>>> Index,
-    Func<S, Either<Unknown<S>, Unknown<object>>> Unbox,
-    Func<S, S> CloneNode)
+    Func<S, string, NavStep<S>> Prop,
+    Func<S, int, NavStep<S>>    Index,
+    Func<S, UnboxStep>          Unbox,
+    Func<S, S>                  CloneNode)
     => new(Prop, Index, Unbox, CloneNode);
 
-  public Func<S, string, Either<Unknown<S>, Option<S>>> Prop => (node, name) =>
-    UnsafeProp(node, name).Match(
-      Left: l => Left<Unknown<S>, Option<S>>(l.Map(CloneNode)),
-      Right: r => r
-    );
+  public NavStep<S> Prop(S input, string key) =>
+    UnsafeProp(input, key).Match(
+      NotApplicable: na => NavStep.NotApplicable(CloneNode(na.Source)),
+      Value:         v  => NavStep.Value(CloneNode(v.Get)),
+      Null:          _  => NavStep.Null<S>(),
+      Absent:        _  => NavStep.Absent<S>());
 
-  public Func<S, int, Either<Unknown<S>, Option<S>>> Index => (node, i) =>
-    UnsafeIndex(node, i).Match(
-      Left: l => Left<Unknown<S>, Option<S>>(l.Map(CloneNode)),
-      Right: r => r
-    );
+  public NavStep<S> Index(S input, int i) =>
+    UnsafeIndex(input, i).Match(
+      NotApplicable: na => NavStep.NotApplicable(CloneNode(na.Source)),
+      Value:         v  => NavStep.Value(CloneNode(v.Get)),
+      Null:          _  => NavStep.Null<S>(),
+      Absent:        _  => NavStep.Absent<S>());
 
-  public Func<S, Either<Unknown<S>, Unknown<object>>> Unbox => node =>
-    UnsafeUnbox(node).Match(
-      Left: l => Left<Unknown<S>, Unknown<object>>(l),
-      Right: u => u.Match(
-        Some: v => Right<Unknown<S>, Unknown<object>>(Unknown.UnsafeFromOption<object>(Optional(DeepOwn(v, CloneNode)))),
-        None: () => Right<Unknown<S>, Unknown<object>>(new Unknown<object>.None())
-      )
-    );
+  public UnboxStep Unbox(S input) =>
+    UnsafeUnbox(input).Match(
+      NotApplicable: na => UnboxStep.NotApplicable(na.Source),
+      Value:         v  => UnboxStep.Value(DeepOwn(v.Get, CloneNode)!),
+      Null:          _  => UnboxStep.Null());
 
   static object? DeepOwn(object? v, Func<S, S> clone)
   {
@@ -212,31 +236,39 @@ public static class ParsePathNav
   ParsePathNav<JsonElement>.Create(
       Prop: (je, name) =>
         je.ValueKind == JsonValueKind.Object
-          ? Right<Unknown<JsonElement>, Option<JsonElement>>(Optional(je.TryGetProperty(name, out var v) ? v : default))
-          : Left<Unknown<JsonElement>, Option<JsonElement>>(Unknown.New(je)),
+          ? (je.TryGetProperty(name, out var v)
+              ? (v.ValueKind == JsonValueKind.Null || v.ValueKind == JsonValueKind.Undefined
+                  ? NavStep.Null<JsonElement>()
+                  : NavStep.Value<JsonElement>(v))
+              : NavStep.Absent<JsonElement>())
+          : NavStep.NotApplicable(je),
 
       Index: (je, i) =>
         je.ValueKind == JsonValueKind.Array && i >= 0
           ? Optional(toSeq(je.EnumerateArray())).Filter(x => x.Count > i).Match(
-              None: () => Right<Unknown<JsonElement>, Option<JsonElement>>(None),
-            Some: v => Right<Unknown<JsonElement>, Option<JsonElement>>(Optional(v[i]))
-          )
-          : Left<Unknown<JsonElement>, Option<JsonElement>>(Unknown.New(je)),
+              None: () => NavStep.Absent<JsonElement>(),
+              Some: v => v[i].ValueKind == JsonValueKind.Null || v[i].ValueKind == JsonValueKind.Undefined
+                ? NavStep.Null<JsonElement>()
+                : NavStep.Value<JsonElement>(v[i])
+            )
+          : NavStep.NotApplicable(je),
 
       Unbox: je => je.ValueKind switch
       {
-        JsonValueKind.String => Right<Unknown<JsonElement>, Unknown<object>>(Unknown.UnsafeFromOption(Optional<object>(je.GetString()))),
-        JsonValueKind.Number => je.TryGetInt32(out var i) ? Right<Unknown<JsonElement>, Unknown<object>>(Unknown.New<object>(i))
-                              : je.TryGetInt64(out var l) ? Right<Unknown<JsonElement>, Unknown<object>>(Unknown.New<object>(l))
-                              : je.TryGetDouble(out var d) ? Right<Unknown<JsonElement>, Unknown<object>>(Unknown.New<object>(d))
-                              : Left<Unknown<JsonElement>, Unknown<object>>(Unknown.New(je)),
-        JsonValueKind.True => Right<Unknown<JsonElement>, Unknown<object>>(Unknown.New<object>(true)),
-        JsonValueKind.False => Right<Unknown<JsonElement>, Unknown<object>>(Unknown.New<object>(false)),
-        JsonValueKind.Null => Right<Unknown<JsonElement>, Unknown<object>>(Unknown.UnsafeFromOption<object>(None)),
-        JsonValueKind.Undefined => Right<Unknown<JsonElement>, Unknown<object>>(Unknown.UnsafeFromOption<object>(None)),
-        JsonValueKind.Array => Right<Unknown<JsonElement>, Unknown<object>>(Unknown.New<object>(je.EnumerateArray())),
-        JsonValueKind.Object => Right<Unknown<JsonElement>, Unknown<object>>(Unknown.New<object>(je)),
-        _ => Left<Unknown<JsonElement>, Unknown<object>>(Unknown.New(je))
+        JsonValueKind.String => Optional(je.GetString()).Match(
+          Some: s => UnboxStep.Value(s),
+          None: () => UnboxStep.Null()),
+        JsonValueKind.Number => je.TryGetInt32(out var i) ? UnboxStep.Value(i)
+                              : je.TryGetInt64(out var l) ? UnboxStep.Value(l)
+                              : je.TryGetDouble(out var d) ? UnboxStep.Value(d)
+                              : UnboxStep.NotApplicable(je),
+        JsonValueKind.True => UnboxStep.Value(true),
+        JsonValueKind.False => UnboxStep.Value(false),
+        JsonValueKind.Null => UnboxStep.Null(),
+        JsonValueKind.Undefined => UnboxStep.Null(),
+        JsonValueKind.Array => UnboxStep.Value(je.EnumerateArray()),
+        JsonValueKind.Object => UnboxStep.Value(je),
+        _ => UnboxStep.NotApplicable(je)
       },
       CloneNode: je =>
         je.ValueKind == JsonValueKind.Undefined
@@ -249,31 +281,35 @@ public static class ParsePathNav
       Prop: (jn, name) =>
         jn is JsonObject obj
           ? (obj.TryGetPropertyValue(name, out var child)
-              ? Right<Unknown<JsonNode>, Option<JsonNode>>(Optional(child))
-              : Right<Unknown<JsonNode>, Option<JsonNode>>(None))
-          : Left<Unknown<JsonNode>, Option<JsonNode>>(Unknown.New(jn)),
+              ? Optional(child).Match(
+                  Some: c => NavStep.Value<JsonNode>(c),
+                  None: () => NavStep.Null<JsonNode>())
+              : NavStep.Absent<JsonNode>())
+          : NavStep.NotApplicable(jn),
 
       Index: (jn, i) =>
         jn is JsonArray arr && i >= 0
           ? (i < arr.Count
-              ? Right<Unknown<JsonNode>, Option<JsonNode>>(Optional(arr[i]))
-              : Right<Unknown<JsonNode>, Option<JsonNode>>(None))
-          : Left<Unknown<JsonNode>, Option<JsonNode>>(Unknown.New(jn)),
+              ? Optional(arr[i]).Match(
+                  Some: c => NavStep.Value<JsonNode>(c),
+                  None: () => NavStep.Null<JsonNode>())
+              : NavStep.Absent<JsonNode>())
+          : NavStep.NotApplicable(jn),
 
       Unbox: jn =>
         jn switch
         {
-          null => Right<Unknown<JsonNode>, Unknown<object>>(new Unknown<object>.None()),
-          JsonArray arr => Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(arr)),
-          JsonObject => Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(jn)),
+          null => UnboxStep.Null(),
+          JsonArray arr => UnboxStep.Value(arr),
+          JsonObject => UnboxStep.Value(jn),
           JsonValue v =>
-            v.TryGetValue<int>(out var iv)    ? Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(iv)) :
-            v.TryGetValue<long>(out var lv)   ? Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(lv)) :
-            v.TryGetValue<double>(out var dv) ? Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(dv)) :
-            v.TryGetValue<bool>(out var bv)   ? Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(bv)) :
-            v.TryGetValue<string>(out var sv) ? Right<Unknown<JsonNode>, Unknown<object>>(Unknown.New<object>(sv))
-                                              : Right<Unknown<JsonNode>, Unknown<object>>(Unknown.UnsafeFromOption<object>(None)),
-          _ => Left<Unknown<JsonNode>, Unknown<object>>(Unknown.New(jn))
+            v.TryGetValue<int>(out var iv)    ? UnboxStep.Value(iv) :
+            v.TryGetValue<long>(out var lv)   ? UnboxStep.Value(lv) :
+            v.TryGetValue<double>(out var dv) ? UnboxStep.Value(dv) :
+            v.TryGetValue<bool>(out var bv)   ? UnboxStep.Value(bv) :
+            v.TryGetValue<string>(out var sv) ? UnboxStep.Value(sv)
+                                              : UnboxStep.Null(),
+          _ => UnboxStep.NotApplicable(jn)
         },
       CloneNode: jn => jn
     );
@@ -282,35 +318,35 @@ public static class ParsePathNav
     ParsePathNav<XElement>.Create(
       Prop: (xe, name) =>
         xe is null
-          ? Left<Unknown<XElement>, Option<XElement>>(new Unknown<XElement>.None())
+          ? NavStep.NotApplicable<XElement>(xe!)
           : name.StartsWith('@')
             ? // Attribute access via @attr convention
               Optional(xe.Attribute(name[1..])).Match(
-                Some: a => Right<Unknown<XElement>, Option<XElement>>(Optional(new XElement("@attr", a.Value))),
-                None: () => Right<Unknown<XElement>, Option<XElement>>(None)
+                Some: a => NavStep.Value<XElement>(new XElement("@attr", a.Value)),
+                None: () => NavStep.Absent<XElement>()
               )
             : toSeq(xe.Elements()).Find(e => e.Name.LocalName == name)
                 .Match(
-                  Some: e => Right<Unknown<XElement>, Option<XElement>>(Optional(e)),
-                  None: () => Right<Unknown<XElement>, Option<XElement>>(None)
+                  Some: e => NavStep.Value<XElement>(e),
+                  None: () => NavStep.Absent<XElement>()
                 ),
 
       Index: (xe, i) =>
         xe is null || i < 0
-          ? Left<Unknown<XElement>, Option<XElement>>(xe is null ? new Unknown<XElement>.None() : Unknown.New(xe))
+          ? NavStep.NotApplicable<XElement>(xe!)
           : Optional(Seq(xe.Elements())).Filter(es => es.Count > i).Match(
-              None: () => Right<Unknown<XElement>, Option<XElement>>(None),
-              Some: es => Right<Unknown<XElement>, Option<XElement>>(Optional(es[i]))
+              None: () => NavStep.Absent<XElement>(),
+              Some: es => NavStep.Value<XElement>(es[i])
             ),
 
       Unbox: xe =>
         xe is null
-          ? Right<Unknown<XElement>, Unknown<object>>(new Unknown<object>.None())
+          ? UnboxStep.Null()
           : xe.HasElements
-            ? Right<Unknown<XElement>, Unknown<object>>(Unknown.New<object>(xe.Elements()))
+            ? UnboxStep.Value(xe.Elements())
             : string.IsNullOrWhiteSpace(xe.Value)
-              ? Right<Unknown<XElement>, Unknown<object>>(Unknown.UnsafeFromOption<object>(None))
-              : Right<Unknown<XElement>, Unknown<object>>(Unknown.New<object>(xe.Value)),
+              ? UnboxStep.Null()
+              : UnboxStep.Value(xe.Value),
       CloneNode: xe => new XElement(xe)
     );
 
@@ -319,29 +355,49 @@ public static class ParsePathNav
       Prop: (node, name) =>
         node switch
         {
-          // For dictionary-like carriers, absence of a key should yield Optional(None), not Left.
-          IReadOnlyDictionary<string, object?> rd => Right<Unknown<object>, Option<object>>(Optional(rd.TryGetValue(name, out var v1) ? v1 : null)),
-          IDictionary<string, object?> d => Right<Unknown<object>, Option<object>>(Optional(d.TryGetValue(name, out var v2) ? v2 : null)),
-          System.Collections.IDictionary legacy => Right<Unknown<object>, Option<object>>(Optional(legacy.Contains(name) ? legacy[name] : null)),
-          _ => Left<Unknown<object>, Option<object>>(Unknown.New(node)) 
+          // For dictionary-like carriers, absence of a key should yield Absent, not NotApplicable.
+          IReadOnlyDictionary<string, object?> rd =>
+            rd.TryGetValue(name, out var v1)
+              ? Optional(v1).Match(
+                  Some: c => NavStep.Value<object>(c),
+                  None: () => NavStep.Null<object>())
+              : NavStep.Absent<object>(),
+          IDictionary<string, object?> d =>
+            d.TryGetValue(name, out var v2)
+              ? Optional(v2).Match(
+                  Some: c => NavStep.Value<object>(c),
+                  None: () => NavStep.Null<object>())
+              : NavStep.Absent<object>(),
+          System.Collections.IDictionary legacy =>
+            legacy.Contains(name)
+              ? Optional(legacy[name]).Match(
+                  Some: c => NavStep.Value<object>(c),
+                  None: () => NavStep.Null<object>())
+              : NavStep.Absent<object>(),
+          _ => NavStep.NotApplicable(node)
         },
 
       Index: (node, i) =>
         node switch
         {
-          IList<object?> list when i >= 0 && i < list.Count => Right<Unknown<object>, Option<object>>(Optional(list[i])),
+          IList<object?> list when i >= 0 && i < list.Count =>
+            Optional(list[i]).Match(
+              Some: c => NavStep.Value<object>(c),
+              None: () => NavStep.Null<object>()),
           IEnumerable<object?> seq when node is not string && i >= 0 =>
               ((Func<Seq<object?>>)(() => Seq(seq))).Try<object, Seq<object?>>(_ => node).Match(
-                Left: _ => Left<Unknown<object>, Option<object>>(Unknown.New(node)),
+                Left: _ => NavStep.NotApplicable(node),
                 Right: xs => Optional(xs).Filter(x => x.Count > i).Match(
-                  None: () => Right<Unknown<object>, Option<object>>(None),
-                  Some: x => Right<Unknown<object>, Option<object>>(Optional(x[i]))
+                  None: () => NavStep.Absent<object>(),
+                  Some: x => Optional(x[i]).Match(
+                    Some: c => NavStep.Value<object>(c),
+                    None: () => NavStep.Null<object>())
                 )
               ),
-          _ => Left<Unknown<object>, Option<object>>(Unknown.New(node))
+          _ => NavStep.NotApplicable(node)
         },
 
-      Unbox: x => Right<Unknown<object>, Unknown<object>>(Unknown.New(x)),
+      Unbox: x => x is null ? UnboxStep.Null() : UnboxStep.Value(x),
       CloneNode: x => x
     );
 
@@ -398,18 +454,20 @@ public static class ParsePathNav
     return obj => Optional(rawGetter(obj));
   }
 
-  static Either<Unknown<object>, Option<object>> ReflectGet(object node, string name)
+  static NavStep<object> ReflectGet(object node, string name)
   {
     var getter = _pocoCache.GetOrAdd((node.GetType(), name), key => BuildGetter(key.Item1, key.Item2));
     if (getter is null)
-      return Right<Unknown<object>, Option<object>>(None);
+      return NavStep.Absent<object>();
     try
     {
-      return Right<Unknown<object>, Option<object>>(getter(node));
+      return getter(node).Match(
+        Some: c => NavStep.Value<object>(c),
+        None: () => NavStep.Null<object>());
     }
     catch
     {
-      return Left<Unknown<object>, Option<object>>(Unknown.New(node));
+      return NavStep.NotApplicable(node);
     }
   }
 
@@ -429,12 +487,14 @@ public static class ParsePathNav
         {
           IDataRecord r =>
             TryGetOrdinal(r, name).Match(
-              None: () => Right<Unknown<object>, Option<object>>(None),
+              None: () => NavStep.Absent<object>(),
               Some: ord => ((Func<object?>)(() => r.IsDBNull(ord) ? null : r.GetValue(ord)))
                             .Try<object, object?>(_ => node)
                             .Match(
-                              Left: _ => Left<Unknown<object>, Option<object>>(Unknown.New(node)),
-                              Right: v => Right<Unknown<object>, Option<object>>(Optional(v))
+                              Left: _ => NavStep.NotApplicable(node),
+                              Right: v => Optional(v).Match(
+                                Some: c => NavStep.Value<object>(c),
+                                None: () => NavStep.Null<object>())
                             )
             ),
           DataRow row =>
@@ -442,11 +502,13 @@ public static class ParsePathNav
               ? ((Func<object?>)(() => row[name]))
                   .Try<object, object?>(_ => node)
                   .Match(
-                    Left: _ => Left<Unknown<object>, Option<object>>(Unknown.New(node)),
-                    Right: v => Right<Unknown<object>, Option<object>>(Optional(v is DBNull ? null : v))
+                    Left: _ => NavStep.NotApplicable(node),
+                    Right: v => Optional(v is DBNull ? null : v).Match(
+                      Some: c => NavStep.Value<object>(c),
+                      None: () => NavStep.Null<object>())
                   )
-              : Right<Unknown<object>, Option<object>>(None),
-          _ => Left<Unknown<object>, Option<object>>(Unknown.New(node))
+              : NavStep.Absent<object>(),
+          _ => NavStep.NotApplicable(node)
         },
 
       Index: (node, i) =>
@@ -454,30 +516,34 @@ public static class ParsePathNav
         {
           IDataRecord r =>
             (i < 0)
-              ? Left<Unknown<object>, Option<object>>(Unknown.New(node))
+              ? NavStep.NotApplicable(node)
               : (i < r.FieldCount)
                 ? ((Func<object?>)(() => r.IsDBNull(i) ? null : r.GetValue(i)))
                     .Try<object, object?>(_ => node)
                     .Match(
-                      Left: _ => Left<Unknown<object>, Option<object>>(Unknown.New(node)),
-                      Right: v => Right<Unknown<object>, Option<object>>(Optional(v))
+                      Left: _ => NavStep.NotApplicable(node),
+                      Right: v => Optional(v).Match(
+                        Some: c => NavStep.Value<object>(c),
+                        None: () => NavStep.Null<object>())
                     )
-                : Right<Unknown<object>, Option<object>>(None),
+                : NavStep.Absent<object>(),
           DataRow row =>
             (i < 0 || row.Table is null)
-              ? Left<Unknown<object>, Option<object>>(Unknown.New(node))
+              ? NavStep.NotApplicable(node)
               : (i < row.Table.Columns.Count)
                 ? ((Func<object?>)(() => row[i]))
                     .Try<object, object?>(_ => node)
                     .Match(
-                      Left: _ => Left<Unknown<object>, Option<object>>(Unknown.New(node)),
-                      Right: v => Right<Unknown<object>, Option<object>>(Optional(v is DBNull ? null : v))
+                      Left: _ => NavStep.NotApplicable(node),
+                      Right: v => Optional(v is DBNull ? null : v).Match(
+                        Some: c => NavStep.Value<object>(c),
+                        None: () => NavStep.Null<object>())
                     )
-                : Right<Unknown<object>, Option<object>>(None),
-          _ => Left<Unknown<object>, Option<object>>(Unknown.New(node))
+                : NavStep.Absent<object>(),
+          _ => NavStep.NotApplicable(node)
         },
 
-      Unbox: x => Object.Unbox(x),
+      Unbox: x => Object.UnsafeUnbox(x),
       CloneNode: x => x
     );
 

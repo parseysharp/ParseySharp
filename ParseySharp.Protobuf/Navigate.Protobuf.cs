@@ -1,26 +1,25 @@
 using Google.Protobuf;
-using Google.Protobuf.Collections;
 using Google.Protobuf.Reflection;
 using Google.Protobuf.WellKnownTypes;
 using System.Collections;
-using System.Linq;
 
 namespace ParseySharp;
 
 public static class ParsePathNavProtobuf
 {
-  private static Either<Unknown<object>, Unknown<object>> UnboxNumber(double d)
+  static bool IsProtoNull(object? o) =>
+    o is null || (o is Value v && v.KindCase == Value.KindOneofCase.NullValue);
+
+  private static UnboxStep UnboxNumber(double d)
   {
-    // Is it an integer?
     if (Math.Abs(d - Math.Truncate(d)) < 1e-9)
     {
       var asLong = (long)Math.Truncate(d);
       if (asLong <= int.MaxValue && asLong >= int.MinValue)
-        return Right<Unknown<object>, Unknown<object>>(Unknown.New<object>((int)asLong));
-      return Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(asLong));
+        return UnboxStep.Value((int)asLong);
+      return UnboxStep.Value(asLong);
     }
-    // Non-integer: keep as double
-    return Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(d));
+    return UnboxStep.Value(d);
   }
   // Protobuf-aware navigator over 'object' to support scalars, messages, repeated and map fields.
   public static readonly ParsePathNav<object> Protobuf =
@@ -31,28 +30,34 @@ public static class ParsePathNavProtobuf
           // WellKnownTypes.Struct behaves like an object: look up by key
           Struct s =>
             s.Fields.TryGetValue(name, out var sv)
-              ? Right<Unknown<object>, Option<object>>(Optional((object)sv))
-              : Right<Unknown<object>, Option<object>>(None),
+              ? Optional<object>(sv).Filter(c => !IsProtoNull(c)).Match(
+                  Some: c => NavStep.Value<object>(c),
+                  None: () => NavStep.Null<object>())
+              : NavStep.Absent<object>(),
 
           // If we're sitting on a Value that wraps a Struct, drill into its fields
           Value v when v.KindCase == Value.KindOneofCase.StructValue =>
             v.StructValue.Fields.TryGetValue(name, out var vv)
-              ? Right<Unknown<object>, Option<object>>(Optional((object)vv))
-              : Right<Unknown<object>, Option<object>>(None),
+              ? Optional<object>(vv).Filter(c => !IsProtoNull(c)).Match(
+                  Some: c => NavStep.Value<object>(c),
+                  None: () => NavStep.Null<object>())
+              : NavStep.Absent<object>(),
 
           IMessage msg =>
             FindField(msg, name).Match(
-              None: () => Right<Unknown<object>, Option<object>>(None),
+              None: () => NavStep.Absent<object>(),
               Some: fd =>
               {
                 var accessor = fd.Accessor;
                 if (fd.HasPresence && !accessor.HasValue(msg))
-                  return Right<Unknown<object>, Option<object>>(None);
+                  return NavStep.Absent<object>();
                 var value = accessor.GetValue(msg);
-                return Right<Unknown<object>, Option<object>>(Optional(value));
+                return Optional(value).Filter(c => !IsProtoNull(c)).Match(
+                  Some: c => NavStep.Value<object>(c),
+                  None: () => NavStep.Null<object>());
               }
             ),
-          _ => Left<Unknown<object>, Option<object>>(Unknown.New(node))
+          _ => NavStep.NotApplicable(node)
         },
 
       Index: (node, i) =>
@@ -61,52 +66,56 @@ public static class ParsePathNavProtobuf
           // WellKnownTypes.ListValue behaves like an array
           ListValue lv when i >= 0 =>
             (i < lv.Values.Count)
-              ? Right<Unknown<object>, Option<object>>(Optional((object)lv.Values[i]))
-              : Right<Unknown<object>, Option<object>>(None),
+              ? Optional<object>(lv.Values[i]).Filter(c => !IsProtoNull(c)).Match(
+                  Some: c => NavStep.Value<object>(c),
+                  None: () => NavStep.Null<object>())
+              : NavStep.Absent<object>(),
 
           // Repeated fields implement IEnumerable but not non-generic IList, so enumerate safely
           IEnumerable en when node is not string && i >= 0 =>
             ((Func<Seq<object>>)(() => Seq(en.Cast<object>()))).Try<object, Seq<object>>(_ => node).Match(
-              Left: _ => Left<Unknown<object>, Option<object>>(Unknown.New(node)),
+              Left: _ => NavStep.NotApplicable(node),
               Right: xs => (i < xs.Count)
-                ? Right<Unknown<object>, Option<object>>(Optional(xs[i]))
-                : Right<Unknown<object>, Option<object>>(None)
+                ? Optional(xs[i]).Filter(c => !IsProtoNull(c)).Match(
+                    Some: c => NavStep.Value<object>(c),
+                    None: () => NavStep.Null<object>())
+                : NavStep.Absent<object>()
             ),
-          _ => Left<Unknown<object>, Option<object>>(Unknown.New(node))
+          _ => NavStep.NotApplicable(node)
         },
 
       Unbox: node =>
         node switch
         {
-          null => Right<Unknown<object>, Unknown<object>>(new Unknown<object>.None()),
+          null => UnboxStep.Null(),
 
           // Unwrap Value into CLR primitives / nested messages / sequences
           Value v => v.KindCase switch
           {
-            Value.KindOneofCase.NullValue   => Right<Unknown<object>, Unknown<object>>(new Unknown<object>.None()),
-            Value.KindOneofCase.StringValue => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(v.StringValue)),
-            Value.KindOneofCase.BoolValue   => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(v.BoolValue)),
+            Value.KindOneofCase.NullValue   => UnboxStep.Null(),
+            Value.KindOneofCase.StringValue => UnboxStep.Value(v.StringValue),
+            Value.KindOneofCase.BoolValue   => UnboxStep.Value(v.BoolValue),
             Value.KindOneofCase.NumberValue => UnboxNumber(v.NumberValue),
-            Value.KindOneofCase.StructValue => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(v.StructValue)),
-            Value.KindOneofCase.ListValue   => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(v.ListValue.Values)),
-            _                                => Right<Unknown<object>, Unknown<object>>(new Unknown<object>.None())
+            Value.KindOneofCase.StructValue => UnboxStep.Value(v.StructValue),
+            Value.KindOneofCase.ListValue   => UnboxStep.Value(v.ListValue.Values),
+            _                                => UnboxStep.Null()
           },
 
           // ListValue should expose its Values for Seq parsing
-          ListValue lv => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(lv.Values)),
+          ListValue lv => UnboxStep.Value(lv.Values),
 
           // Repeated (IEnumerable but not string) -> expose enumerable for Seq parsing
-          IEnumerable en when node is not string => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(en)),
+          IEnumerable en when node is not string => UnboxStep.Value(en),
 
           // Primitives and enums
-          int or long or double or float or bool or string => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(node)),
-          uint or ulong => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(Convert.ToInt64(node))),
-          System.Enum => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(Convert.ToInt32(node))),
+          int or long or double or float or bool or string => UnboxStep.Value(node),
+          uint or ulong => UnboxStep.Value(Convert.ToInt64(node)),
+          System.Enum => UnboxStep.Value(Convert.ToInt32(node)),
 
           // Bytes
-          byte[] or ByteString => Right<Unknown<object>, Unknown<object>>(Unknown.New<object>(node)),
+          byte[] or ByteString => UnboxStep.Value(node),
 
-          _ => Left<Unknown<object>, Unknown<object>>(Unknown.New(node))
+          _ => UnboxStep.NotApplicable(node)
         },
       CloneNode: x => x
     );
