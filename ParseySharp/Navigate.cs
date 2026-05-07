@@ -94,21 +94,21 @@ public static class PathParser
   public static Validation<Seq<ParsePathErr>, Unknown<B>> NextStep<B>(
     ListZipper<PathSeg> path,
     Func<B, NavStep<B>> getNext,
-    Func<Unknown<B>, Validation<Seq<ParsePathErr>, Unknown<B>>> failMissing,
+    Func<Unknown<B>, Seq<ParsePathErr>> missingErrors,
     Unknown<B> input
   ) =>
     input.Match(
       Value: v => getNext(v.Get).Match(
-        NotApplicable: _ => failMissing(input),
+        NotApplicable: _ => Fail<Seq<ParsePathErr>, Unknown<B>>(missingErrors(input)),
         Value:         w => Success<Seq<ParsePathErr>, Unknown<B>>(Unknown.Value(w.Get)),
         Null:          _ => path.Nexts.IsEmpty
           ? Success<Seq<ParsePathErr>, Unknown<B>>(Unknown.Null<B>())
-          : failMissing(input),
+          : Fail<Seq<ParsePathErr>, Unknown<B>>(missingErrors(input)),
         Absent:        _ => path.Nexts.IsEmpty
           ? Success<Seq<ParsePathErr>, Unknown<B>>(Unknown.Absent<B>())
-          : failMissing(input)),
-      Null:   _ => failMissing(input),
-      Absent: _ => failMissing(input));
+          : Fail<Seq<ParsePathErr>, Unknown<B>>(missingErrors(input))),
+      Null:   _ => Fail<Seq<ParsePathErr>, Unknown<B>>(missingErrors(input)),
+      Absent: _ => Fail<Seq<ParsePathErr>, Unknown<B>>(missingErrors(input)));
 
   public static Validation<Seq<ParsePathErr>, Unknown<B>> Navigate<B>(
     ParsePathNav<B> nav,
@@ -126,21 +126,21 @@ public static class PathParser
               NextStep<B>(
                 z,
                 b => nav.Prop(b, k.Name),
-                u => Fail<Seq<ParsePathErr>, Unknown<B>>([new ParsePathErr(
+                u => [new ParsePathErr(
                   $"Missing property {k.Name}",
                   Name,
                   u.ToOption().Map(nav.CloneNode),
-                  PathSegRender.ToStrings(toSeq(z.Prevs.Reverse())))]),
+                  PathSegRender.ToStrings(toSeq(z.Prevs.Reverse())))],
                 cur),
             PathSeg.Index ix =>
               NextStep<B>(
                 z,
                 b => nav.Index(b, ix.I),
-                u => Fail<Seq<ParsePathErr>, Unknown<B>>([new ParsePathErr(
+                u => [new ParsePathErr(
                   $"Missing index {ix.I}",
                   Name,
                   u.ToOption().Map(nav.CloneNode),
-                  PathSegRender.ToStrings(toSeq(z.Prevs.Reverse())))]),
+                  PathSegRender.ToStrings(toSeq(z.Prevs.Reverse())))],
                 cur),
             _ =>
               Fail<Seq<ParsePathErr>, Unknown<B>>([new ParsePathErr(
