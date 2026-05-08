@@ -100,6 +100,19 @@ public class OptionParse<A>(Parse<A> parser): Parse<Option<A>>
      Absent: _ => Success<Seq<ParsePathErr>, Option<A>>(None));
 }
 
+public class PatchParse<A>(Parse<A> parser): Parse<FieldUpdate<A>>
+{
+  public Func<Unknown<B>, Validation<Seq<ParsePathErr>, FieldUpdate<A>>> Run<B>(ParsePathNav<B> nav) =>
+    input => input.Match(
+     Value:  v => nav.Unbox(v.Get).Match(
+       NotApplicable: na => Fail<Seq<ParsePathErr>, FieldUpdate<A>>([ParsePathErr.FromParseErr(
+         new ParseErr("Could not unbox value", typeof(A).Name, Unknown.New(na.Source)), [])]),
+       Value:         _  => parser.Run<B>(nav)(input).Map(a => FieldUpdate.Set(a)),
+       Null:          _  => Success<Seq<ParsePathErr>, FieldUpdate<A>>(FieldUpdate.Clear<A>())),
+     Null:   _ => Success<Seq<ParsePathErr>, FieldUpdate<A>>(FieldUpdate.Clear<A>()),
+     Absent: _ => Success<Seq<ParsePathErr>, FieldUpdate<A>>(FieldUpdate.Leave<A>()));
+}
+
 public class RecurParse<A, X>(A initial, Func<A, K<Parse, Next<A, X>>> f) : Parse<X>
 {
   public Func<Unknown<B>, Validation<Seq<ParsePathErr>, X>> Run<B>(ParsePathNav<B> nav) =>
@@ -126,6 +139,9 @@ public static class ParseExtensions
 
   public static Parse<Option<A>> Option<A>(this Parse<A> parser) =>
     new OptionParse<A>(parser);
+
+  public static Parse<FieldUpdate<A>> Patch<A>(this Parse<A> parser) =>
+    new PatchParse<A>(parser);
 
   public static Parse<B> Filter<A, B>(this Parse<A> parser, Func<A, Validation<Seq<ParsePathErr>, B>> f) =>
     new FilterParse<A, B>(parser, f);
