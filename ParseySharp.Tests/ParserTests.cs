@@ -525,7 +525,7 @@ public class ParserTests
     var setJson = """{"name": "John"}""";
     var setResult = parser.ParseJson()(JsonDocument.Parse(setJson).RootElement);
     Assert.Equal(
-      Success<Seq<ParsePathErr>, FieldUpdate<string>>(FieldUpdate.Set("John")),
+      Success<Seq<ParsePathErr>, NullableOption<string>>(NullableOption.Set("John")),
       setResult
     );
 
@@ -533,7 +533,7 @@ public class ParserTests
     var clearJson = """{"name": null}""";
     var clearResult = parser.ParseJson()(JsonDocument.Parse(clearJson).RootElement);
     Assert.Equal(
-      Success<Seq<ParsePathErr>, FieldUpdate<string>>(FieldUpdate.Clear<string>()),
+      Success<Seq<ParsePathErr>, NullableOption<string>>(NullableOption.Clear<string>()),
       clearResult
     );
 
@@ -541,7 +541,7 @@ public class ParserTests
     var leaveJson = """{"age": 30}""";
     var leaveResult = parser.ParseJson()(JsonDocument.Parse(leaveJson).RootElement);
     Assert.Equal(
-      Success<Seq<ParsePathErr>, FieldUpdate<string>>(FieldUpdate.Leave<string>()),
+      Success<Seq<ParsePathErr>, NullableOption<string>>(NullableOption.Leave<string>()),
       leaveResult
     );
   }

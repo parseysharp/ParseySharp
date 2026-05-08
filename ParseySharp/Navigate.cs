@@ -91,33 +91,33 @@ public static class UnboxStepExtensions
 public static class PathParser
 {
 
-  public static Validation<Seq<ParsePathErr>, Unknown<B>> NextStep<B>(
+  public static Validation<Seq<ParsePathErr>, NullableOption<B>> NextStep<B>(
     ListZipper<PathSeg> path,
     Func<B, NavStep<B>> getNext,
-    Func<Unknown<B>, Seq<ParsePathErr>> missingErrors,
-    Unknown<B> input
+    Func<NullableOption<B>, Seq<ParsePathErr>> missingErrors,
+    NullableOption<B> input
   ) =>
     input.Match(
       Value: v => getNext(v.Get).Match(
-        NotApplicable: _ => Fail<Seq<ParsePathErr>, Unknown<B>>(missingErrors(input)),
-        Value:         w => Success<Seq<ParsePathErr>, Unknown<B>>(Unknown.Value(w.Get)),
+        NotApplicable: _ => Fail<Seq<ParsePathErr>, NullableOption<B>>(missingErrors(input)),
+        Value:         w => Success<Seq<ParsePathErr>, NullableOption<B>>(NullableOption.Value(w.Get)),
         Null:          _ => path.Nexts.IsEmpty
-          ? Success<Seq<ParsePathErr>, Unknown<B>>(Unknown.Null<B>())
-          : Fail<Seq<ParsePathErr>, Unknown<B>>(missingErrors(input)),
+          ? Success<Seq<ParsePathErr>, NullableOption<B>>(NullableOption.Null<B>())
+          : Fail<Seq<ParsePathErr>, NullableOption<B>>(missingErrors(input)),
         Absent:        _ => path.Nexts.IsEmpty
-          ? Success<Seq<ParsePathErr>, Unknown<B>>(Unknown.Absent<B>())
-          : Fail<Seq<ParsePathErr>, Unknown<B>>(missingErrors(input))),
-      Null:   _ => Fail<Seq<ParsePathErr>, Unknown<B>>(missingErrors(input)),
-      Absent: _ => Fail<Seq<ParsePathErr>, Unknown<B>>(missingErrors(input)));
+          ? Success<Seq<ParsePathErr>, NullableOption<B>>(NullableOption.Absent<B>())
+          : Fail<Seq<ParsePathErr>, NullableOption<B>>(missingErrors(input))),
+      Null:   _ => Fail<Seq<ParsePathErr>, NullableOption<B>>(missingErrors(input)),
+      Absent: _ => Fail<Seq<ParsePathErr>, NullableOption<B>>(missingErrors(input)));
 
-  public static Validation<Seq<ParsePathErr>, Unknown<B>> Navigate<B>(
+  public static Validation<Seq<ParsePathErr>, NullableOption<B>> Navigate<B>(
     ParsePathNav<B> nav,
     ListZipper<PathSeg> path,
     string Name,
-    Unknown<B> input
+    NullableOption<B> input
   ) =>
     path.Fold(
-        Success<Seq<ParsePathErr>, Unknown<B>>(input),
+        Success<Seq<ParsePathErr>, NullableOption<B>>(input),
         (acc, z) =>
           from cur in acc
           from next in z.Focus switch
@@ -143,8 +143,8 @@ public static class PathParser
                   PathSegRender.ToStrings(toSeq(z.Prevs.Reverse())))],
                 cur),
             _ =>
-              Fail<Seq<ParsePathErr>, Unknown<B>>([new ParsePathErr(
-                $"Unknown path segment type {z.Focus}",
+              Fail<Seq<ParsePathErr>, NullableOption<B>>([new ParsePathErr(
+                $"NullableOption path segment type {z.Focus}",
                 Name,
                 cur.ToOption(),
                 PathSegRender.ToStrings(toSeq(z.Prevs.Reverse())))])
