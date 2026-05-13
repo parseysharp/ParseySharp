@@ -18,11 +18,6 @@ public static class NullableOption
   public static NullableOption<T> New<T>(T value) =>
     value is null ? Null<T>() : Value(value);
 
-  // Patch-parser semantic aliases
-  public static NullableOption<T> Set<T>(T v)   => Value(v);
-  public static NullableOption<T> Clear<T>()    => Null<T>();
-  public static NullableOption<T> Leave<T>()    => Absent<T>();
-
   public static Option<T> ToOption<T>(this NullableOption<T> u) =>
     u.Match(
       Value:  v => Optional(v.Get),

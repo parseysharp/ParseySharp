@@ -100,17 +100,17 @@ public class OptionParse<A>(Parse<A> parser): Parse<Option<A>>
      Absent: _ => Success<Seq<ParsePathErr>, Option<A>>(None));
 }
 
-public class PatchParse<A>(Parse<A> parser): Parse<NullableOption<A>>
+public class NullableOptionParse<A>(Parse<A> parser): Parse<NullableOption<A>>
 {
   public Func<NullableOption<B>, Validation<Seq<ParsePathErr>, NullableOption<A>>> Run<B>(ParsePathNav<B> nav) =>
     input => input.Match(
      Value:  v => nav.Unbox(v.Get).Match(
        NotApplicable: na => Fail<Seq<ParsePathErr>, NullableOption<A>>([ParsePathErr.FromParseErr(
          new ParseErr("Could not unbox value", typeof(A).Name, NullableOption.New(na.Source)), [])]),
-       Value:         _  => parser.Run<B>(nav)(input).Map(a => NullableOption.Set(a)),
-       Null:          _  => Success<Seq<ParsePathErr>, NullableOption<A>>(NullableOption.Clear<A>())),
-     Null:   _ => Success<Seq<ParsePathErr>, NullableOption<A>>(NullableOption.Clear<A>()),
-     Absent: _ => Success<Seq<ParsePathErr>, NullableOption<A>>(NullableOption.Leave<A>()));
+       Value:         _  => parser.Run<B>(nav)(input).Map(a => NullableOption.Value(a)),
+       Null:          _  => Success<Seq<ParsePathErr>, NullableOption<A>>(NullableOption.Null<A>())),
+     Null:   _ => Success<Seq<ParsePathErr>, NullableOption<A>>(NullableOption.Null<A>()),
+     Absent: _ => Success<Seq<ParsePathErr>, NullableOption<A>>(NullableOption.Absent<A>()));
 }
 
 public class RecurParse<A, X>(A initial, Func<A, K<Parse, Next<A, X>>> f) : Parse<X>
@@ -141,7 +141,7 @@ public static class ParseExtensions
     new OptionParse<A>(parser);
 
   public static Parse<NullableOption<A>> Patch<A>(this Parse<A> parser) =>
-    new PatchParse<A>(parser);
+    new NullableOptionParse<A>(parser);
 
   public static Parse<B> Filter<A, B>(this Parse<A> parser, Func<A, Validation<Seq<ParsePathErr>, B>> f) =>
     new FilterParse<A, B>(parser, f);

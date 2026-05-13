@@ -144,7 +144,7 @@ public static class PathParser
                 cur),
             _ =>
               Fail<Seq<ParsePathErr>, NullableOption<B>>([new ParsePathErr(
-                $"NullableOption path segment type {z.Focus}",
+                $"Unknown path segment type {z.Focus}",
                 Name,
                 cur.ToOption(),
                 PathSegRender.ToStrings(toSeq(z.Prevs.Reverse())))])
