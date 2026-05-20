@@ -107,7 +107,7 @@ public class NullableOptionParse<A>(Parse<A> parser): Parse<NullableOption<A>>
      Value:  v => nav.Unbox(v.Get).Match(
        NotApplicable: na => Fail<Seq<ParsePathErr>, NullableOption<A>>([ParsePathErr.FromParseErr(
          new ParseErr("Could not unbox value", typeof(A).Name, NullableOption.New(na.Source)), [])]),
-       Value:         _  => parser.Run<B>(nav)(input).Map(a => NullableOption.Value(a)),
+       Value:         _  => parser.Run<B>(nav)(input).Map(NullableOption.New),
        Null:          _  => Success<Seq<ParsePathErr>, NullableOption<A>>(NullableOption.Null<A>())),
      Null:   _ => Success<Seq<ParsePathErr>, NullableOption<A>>(NullableOption.Null<A>()),
      Absent: _ => Success<Seq<ParsePathErr>, NullableOption<A>>(NullableOption.Absent<A>()));
@@ -140,7 +140,7 @@ public static class ParseExtensions
   public static Parse<Option<A>> Option<A>(this Parse<A> parser) =>
     new OptionParse<A>(parser);
 
-  public static Parse<NullableOption<A>> Patch<A>(this Parse<A> parser) =>
+  public static Parse<NullableOption<A>> NullableOption<A>(this Parse<A> parser) =>
     new NullableOptionParse<A>(parser);
 
   public static Parse<B> Filter<A, B>(this Parse<A> parser, Func<A, Validation<Seq<ParsePathErr>, B>> f) =>
@@ -228,7 +228,7 @@ public static class ParseExtensions
   }
 
   public static Func<B, Validation<Seq<ParsePathErr>, A>> RunWithNav<A, B>(this Parse<A> parser, ParsePathNav<B> nav) =>
-    input => parser.Run<B>(nav)(NullableOption.New(input));
+    input => parser.Run<B>(nav)(ParseySharp.NullableOption.New(input));
 }
 
 public partial class Parse: Monad<Parse>, Applicative<Parse>

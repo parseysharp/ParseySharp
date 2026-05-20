@@ -519,7 +519,7 @@ public class ParserTests
   [Fact]
   public void Parses_Patch()
   {
-    var parser = Parse.As<string>().Patch().At("name", []);
+    var parser = Parse.As<string>().NullableOption().At("name", []);
 
     // Set: real value at "name"
     var setJson = """{"name": "John"}""";
