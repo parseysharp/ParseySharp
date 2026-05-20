@@ -517,7 +517,7 @@ public class ParserTests
     }
 
   [Fact]
-  public void Parses_Patch()
+  public void Parses_NullableOption()
   {
     var parser = Parse.As<string>().NullableOption().At("name", []);
 
