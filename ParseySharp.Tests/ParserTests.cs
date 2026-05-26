@@ -515,4 +515,34 @@ public class ParserTests
         actionsParser.ParseJsonNode()(actionsInput));
 
     }
+
+  [Fact]
+  public void Parses_NullableOption()
+  {
+    var parser = Parse.As<string>().NullableOption().At("name", []);
+
+    // Set: real value at "name"
+    var setJson = """{"name": "John"}""";
+    var setResult = parser.ParseJson()(JsonDocument.Parse(setJson).RootElement);
+    Assert.Equal(
+      Success<Seq<ParsePathErr>, NullableOption<string>>(NullableOption.Value("John")),
+      setResult
+    );
+
+    // Clear: explicit null at "name"
+    var clearJson = """{"name": null}""";
+    var clearResult = parser.ParseJson()(JsonDocument.Parse(clearJson).RootElement);
+    Assert.Equal(
+      Success<Seq<ParsePathErr>, NullableOption<string>>(NullableOption.Null<string>()),
+      clearResult
+    );
+
+    // Leave: missing "name" field
+    var leaveJson = """{"age": 30}""";
+    var leaveResult = parser.ParseJson()(JsonDocument.Parse(leaveJson).RootElement);
+    Assert.Equal(
+      Success<Seq<ParsePathErr>, NullableOption<string>>(NullableOption.Absent<string>()),
+      leaveResult
+    );
+  }
 }

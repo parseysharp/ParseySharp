@@ -8,62 +8,62 @@ using System.Data;
 #pragma warning disable IDE1006 // Naming Styles
 public interface Parse<A>: K<Parse, A>
 {
-  public abstract Func<Unknown<B>, Validation<Seq<ParsePathErr>, A>> Run<B>(ParsePathNav<B> nav);
+  public abstract Func<NullableOption<B>, Validation<Seq<ParsePathErr>, A>> Run<B>(ParsePathNav<B> nav);
 }
 #pragma warning restore IDE1006 // Naming Styles
 
 public class FilterParse<A, X>(Parse<A> pa, Func<A, Validation<Seq<ParsePathErr>, X>> f): Parse<X>
 {
-  public Func<Unknown<B>, Validation<Seq<ParsePathErr>, X>> Run<B>(ParsePathNav<B> nav) =>
+  public Func<NullableOption<B>, Validation<Seq<ParsePathErr>, X>> Run<B>(ParsePathNav<B> nav) =>
     input => pa.Run<B>(nav)(input).Bind(x => f(x));
 }
 
 public class FailParse<A>(Seq<ParsePathErr> errors): Parse<A>
 {
-  public Func<Unknown<B>, Validation<Seq<ParsePathErr>, A>> Run<B>(ParsePathNav<B> nav) =>
+  public Func<NullableOption<B>, Validation<Seq<ParsePathErr>, A>> Run<B>(ParsePathNav<B> nav) =>
     input => Fail<Seq<ParsePathErr>, A>(errors);
 }
 
 public class BindParse<A, X>(Parse<A> pa, Func<A, Parse<X>> f): Parse<X>
 {
-  public Func<Unknown<B>, Validation<Seq<ParsePathErr>, X>> Run<B>(ParsePathNav<B> nav) =>
+  public Func<NullableOption<B>, Validation<Seq<ParsePathErr>, X>> Run<B>(ParsePathNav<B> nav) =>
     input => pa.Run<B>(nav)(input).Bind(x => f(x).Run<B>(nav)(input));
 }
 
 public class MapParse<A, X>(Parse<A> pa, Func<A, X> f): Parse<X>
 {
-  public Func<Unknown<B>, Validation<Seq<ParsePathErr>, X>> Run<B>(ParsePathNav<B> nav) =>
+  public Func<NullableOption<B>, Validation<Seq<ParsePathErr>, X>> Run<B>(ParsePathNav<B> nav) =>
     input => pa.Run<B>(nav)(input).Map(f);
 }
 
 public class ApplyParse<A, B, C>(Parse<A> pa, Parse<B> pb, Func<A, B, C> f): Parse<C>
 {
-  public Func<Unknown<X>, Validation<Seq<ParsePathErr>, C>> Run<X>(ParsePathNav<X> nav) =>
+  public Func<NullableOption<X>, Validation<Seq<ParsePathErr>, C>> Run<X>(ParsePathNav<X> nav) =>
     input => (pa.Run<X>(nav)(input), pb.Run<X>(nav)(input)).Apply(f).As();
 }
 
 public class PureParse<A>(A value): Parse<A>
 {
-  public Func<Unknown<B>, Validation<Seq<ParsePathErr>, A>> Run<B>(ParsePathNav<B> nav) =>
+  public Func<NullableOption<B>, Validation<Seq<ParsePathErr>, A>> Run<B>(ParsePathNav<B> nav) =>
     input => Success<Seq<ParsePathErr>, A>(value);
 }
 
-public class ValueParse<A>(Func<Unknown<object>, Validation<Seq<ParsePathErr>, A>> run): Parse<A>
+public class ValueParse<A>(Func<NullableOption<object>, Validation<Seq<ParsePathErr>, A>> run): Parse<A>
 {
-  public Func<Unknown<B>, Validation<Seq<ParsePathErr>, A>> Run<B>(ParsePathNav<B> nav) =>
+  public Func<NullableOption<B>, Validation<Seq<ParsePathErr>, A>> Run<B>(ParsePathNav<B> nav) =>
     input => input.Match(
       Value:  v => nav.Unbox(v.Get).Match(
         NotApplicable: na => Fail<Seq<ParsePathErr>, A>([ParsePathErr.FromParseErr(
-          new ParseErr("Could not unbox value", typeof(A).Name, Unknown.New(na.Source)), [])]),
-        Value:         w  => run(Unknown.Value(w.Get)),
-        Null:          _  => run(Unknown.Null<object>())),
-      Null:   _ => run(Unknown.Null<object>()),
-      Absent: _ => run(Unknown.Absent<object>()));
+          new ParseErr("Could not unbox value", typeof(A).Name, NullableOption.New(na.Source)), [])]),
+        Value:         w  => run(NullableOption.Value(w.Get)),
+        Null:          _  => run(NullableOption.Null<object>())),
+      Null:   _ => run(NullableOption.Null<object>()),
+      Absent: _ => run(NullableOption.Absent<object>()));
 }
 
 public class OrElseParse<A>(Parse<A> p1, Parse<A> p2): Parse<A>
 {
-  public Func<Unknown<B>, Validation<Seq<ParsePathErr>, A>> Run<B>(ParsePathNav<B> nav) =>
+  public Func<NullableOption<B>, Validation<Seq<ParsePathErr>, A>> Run<B>(ParsePathNav<B> nav) =>
     input => p1.Run<B>(nav)(input).Match(
       Succ: r => Success<Seq<ParsePathErr>, A>(r),
       Fail: e1 => p2.Run<B>(nav)(input)
@@ -72,7 +72,7 @@ public class OrElseParse<A>(Parse<A> p1, Parse<A> p2): Parse<A>
 
 public class PathParse<A>(string Name, ListZipper<PathSeg> Path, Parse<A> parser): Parse<A>
 {
-  public Func<Unknown<B>, Validation<Seq<ParsePathErr>, A>> Run<B>(ParsePathNav<B> nav) =>
+  public Func<NullableOption<B>, Validation<Seq<ParsePathErr>, A>> Run<B>(ParsePathNav<B> nav) =>
     input => PathParser.Navigate(nav, Path, Name, input).Bind(x => 
       Parse.PrefixErrors(
         parser.Run<B>(nav)(x),
@@ -81,28 +81,41 @@ public class PathParse<A>(string Name, ListZipper<PathSeg> Path, Parse<A> parser
 
 public class SeqParse<A>(Parse<A> parser): Parse<Seq<A>>
 {
-  public Func<Unknown<B>, Validation<Seq<ParsePathErr>, Seq<A>>> Run<B>(ParsePathNav<B> nav) =>
+  public Func<NullableOption<B>, Validation<Seq<ParsePathErr>, Seq<A>>> Run<B>(ParsePathNav<B> nav) =>
     input => Parse.Seq<B>().Run<B>(nav)(input)
       .Bind(xs => xs.Zip(toSeq(Range(0, int.MaxValue))).Traverse(
-        t => Parse.PrefixErrors(parser.Run(nav)(Unknown.New(t.First)), [$"[{t.Second}]"])));
+        t => Parse.PrefixErrors(parser.Run(nav)(NullableOption.New(t.First)), [$"[{t.Second}]"])));
 }
 
 public class OptionParse<A>(Parse<A> parser): Parse<Option<A>>
 {
-  public Func<Unknown<B>, Validation<Seq<ParsePathErr>, Option<A>>> Run<B>(ParsePathNav<B> nav) =>
+  public Func<NullableOption<B>, Validation<Seq<ParsePathErr>, Option<A>>> Run<B>(ParsePathNav<B> nav) =>
     input => input.Match(
      Value:  v => nav.Unbox(v.Get).Match(
        NotApplicable: na => Fail<Seq<ParsePathErr>, Option<A>>([ParsePathErr.FromParseErr(
-         new ParseErr("Could not unbox value", typeof(A).Name, Unknown.New(na.Source)), [])]),
+         new ParseErr("Could not unbox value", typeof(A).Name, NullableOption.New(na.Source)), [])]),
        Value:         _  => parser.Run<B>(nav)(input).Map(Optional),
        Null:          _  => Success<Seq<ParsePathErr>, Option<A>>(None)),
      Null:   _ => Success<Seq<ParsePathErr>, Option<A>>(None),
      Absent: _ => Success<Seq<ParsePathErr>, Option<A>>(None));
 }
 
+public class NullableOptionParse<A>(Parse<A> parser): Parse<NullableOption<A>>
+{
+  public Func<NullableOption<B>, Validation<Seq<ParsePathErr>, NullableOption<A>>> Run<B>(ParsePathNav<B> nav) =>
+    input => input.Match(
+     Value:  v => nav.Unbox(v.Get).Match(
+       NotApplicable: na => Fail<Seq<ParsePathErr>, NullableOption<A>>([ParsePathErr.FromParseErr(
+         new ParseErr("Could not unbox value", typeof(A).Name, NullableOption.New(na.Source)), [])]),
+       Value:         _  => parser.Run<B>(nav)(input).Map(NullableOption.New),
+       Null:          _  => Success<Seq<ParsePathErr>, NullableOption<A>>(NullableOption.Null<A>())),
+     Null:   _ => Success<Seq<ParsePathErr>, NullableOption<A>>(NullableOption.Null<A>()),
+     Absent: _ => Success<Seq<ParsePathErr>, NullableOption<A>>(NullableOption.Absent<A>()));
+}
+
 public class RecurParse<A, X>(A initial, Func<A, K<Parse, Next<A, X>>> f) : Parse<X>
 {
-  public Func<Unknown<B>, Validation<Seq<ParsePathErr>, X>> Run<B>(ParsePathNav<B> nav) =>
+  public Func<NullableOption<B>, Validation<Seq<ParsePathErr>, X>> Run<B>(ParsePathNav<B> nav) =>
     input =>
     {
       var value = initial;
@@ -126,6 +139,9 @@ public static class ParseExtensions
 
   public static Parse<Option<A>> Option<A>(this Parse<A> parser) =>
     new OptionParse<A>(parser);
+
+  public static Parse<NullableOption<A>> NullableOption<A>(this Parse<A> parser) =>
+    new NullableOptionParse<A>(parser);
 
   public static Parse<B> Filter<A, B>(this Parse<A> parser, Func<A, Validation<Seq<ParsePathErr>, B>> f) =>
     new FilterParse<A, B>(parser, f);
@@ -212,7 +228,7 @@ public static class ParseExtensions
   }
 
   public static Func<B, Validation<Seq<ParsePathErr>, A>> RunWithNav<A, B>(this Parse<A> parser, ParsePathNav<B> nav) =>
-    input => parser.Run<B>(nav)(Unknown.New(input));
+    input => parser.Run<B>(nav)(ParseySharp.NullableOption.New(input));
 }
 
 public partial class Parse: Monad<Parse>, Applicative<Parse>
@@ -228,7 +244,7 @@ public partial class Parse: Monad<Parse>, Applicative<Parse>
 
   public static K<Parse, A> Pure<A>(A a) => new PureParse<A>(a);
 
-  public static Validation<Seq<ParsePathErr>, object> NotNull<A>(Unknown<object> input) =>
+  public static Validation<Seq<ParsePathErr>, object> NotNull<A>(NullableOption<object> input) =>
     input.Match(
       Value:  v => Success<Seq<ParsePathErr>, object>(v.Get),
       Null:   _ => Fail<Seq<ParsePathErr>, object>([new ParsePathErr("Null or missing value", typeof(A).Name, None, [])]),
